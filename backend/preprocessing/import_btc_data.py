@@ -33,7 +33,6 @@ sys.path.insert(0, str(ROOT_DIR))
 from backend.config import (  # noqa: E402
     BTC_MAP_KEYFRAMES_DIR,
     BTC_MEDIA_INFO_DIR,
-    BTC_OBJECTS_DIR,
     INDEX_DIR,
     KEYFRAMES_DIR,
     METADATA_PATH,
@@ -269,73 +268,6 @@ def load_map_keyframes() -> dict[str, dict[str, dict]]:
     return mapping
 
 
-# ---------------------------------------------------------------------------
-# Object tags — PER KEYFRAME (not gộp cả video)
-# ---------------------------------------------------------------------------
-
-def _process_video_objects(video_folder: Path) -> tuple[str, dict[str, set[str]]]:
-    """Trả về (video_id, {frame_stem: {labels...}}) — giữ riêng theo từng keyframe."""
-    video_id = video_folder.name
-    per_frame: dict[str, set[str]] = {}
-    try:
-        for entry in os.scandir(video_folder):
-            if not entry.name.endswith(".json"):
-                continue
-            frame_stem = Path(entry.name).stem  # ví dụ "0000" từ "0000.json"
-            labels: set[str] = set()
-            try:
-                with open(entry.path, encoding="utf-8-sig") as fh:
-                    data = json.load(fh)
-                nodes = data if isinstance(data, list) else data.values()
-                for node in nodes:
-                    if isinstance(node, dict):
-                        label = node.get("label") or node.get("class") or node.get("name")
-                        if label:
-                            labels.add(str(label))
-                    elif isinstance(node, list):
-                        for item in node:
-                            if isinstance(item, dict):
-                                label = item.get("label") or item.get("class") or item.get("name")
-                                if label:
-                                    labels.add(str(label))
-                            elif isinstance(item, str):
-                                labels.add(item)
-                    elif isinstance(node, str):
-                        labels.add(node)
-            except Exception:
-                continue
-            if labels:
-                per_frame[frame_stem] = labels
-    except Exception as exc:
-        logger.debug("Could not read object folder %s: %s", video_folder, exc)
-    return video_id, per_frame
-
-
-def load_objects() -> dict[str, dict[str, set[str]]]:
-    """Trả về {video_id: {frame_stem: {labels...}}} — mỗi keyframe có tag riêng."""
-    video_objects: dict[str, dict[str, set[str]]] = {}
-    if not BTC_OBJECTS_DIR.exists():
-        logger.warning("Objects dir not found: %s", BTC_OBJECTS_DIR)
-        return video_objects
-
-    video_folders = []
-    for item in BTC_OBJECTS_DIR.iterdir():
-        if not item.is_dir():
-            continue
-        children = list(item.iterdir())
-        subfolders = [child for child in children if child.is_dir()]
-        if subfolders:
-            video_folders.extend(subfolders)
-        else:
-            video_folders.append(item)
-
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        for video_id, per_frame in executor.map(_process_video_objects, video_folders):
-            if per_frame:
-                video_objects[video_id] = per_frame
-
-    logger.info("Loaded object tags for %d videos.", len(video_objects))
-    return video_objects
 
 
 # ---------------------------------------------------------------------------
@@ -513,7 +445,6 @@ def build_btc_metadata(
 
     media_info = None
     keyframe_maps = None
-    object_tags = None
 
     all_items = []
     skipped_count = 0
@@ -529,14 +460,12 @@ def build_btc_metadata(
         if media_info is None:
             media_info = load_media_info()
             keyframe_maps = load_map_keyframes()
-            object_tags = load_objects()
 
         info = media_info.get(video_id, {})
         fps = _as_float(info.get("fps"), 25.0)
         duration = _as_float(info.get("duration"), 0.0)
         title = str(info.get("title") or video_id.replace("_", " "))
         frame_map = keyframe_maps.get(video_id, {})
-        video_object_map = object_tags.get(video_id, {})
 
         video_path_obj = _find_video_file(video_id)
         video_path_str = str(video_path_obj) if video_path_obj else None
@@ -548,7 +477,6 @@ def build_btc_metadata(
             frame_id = int(frame_info["frame_id"])
             pts_time = float(frame_info["pts_time"])
             item_fps = float(frame_info.get("fps") or fps)
-            frame_tags = video_object_map.get(frame_path.stem, set())
             item = {
                 "video_id": video_id,
                 "video_title": title,
@@ -565,7 +493,7 @@ def build_btc_metadata(
                 "pts_time": round(pts_time, 6),
                 "frame_source": frame_info.get("source", "unknown"),
                 "text": "",
-                "object_tags": ", ".join(sorted(frame_tags)),
+                "object_tags": "",
                 "scene_id": "",
                 "scene_rank": 0,
             }

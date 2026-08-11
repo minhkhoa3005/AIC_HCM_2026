@@ -10,14 +10,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-from backend.preprocessing.import_btc_data import (  # noqa: E402
-    assign_text_by_pts,
-    build_btc_metadata,
-    load_map_keyframes,
-    load_media_info,
-    load_objects,
-    scan_keyframes,
-)
+from backend.preprocessing.import_btc_data import build_btc_metadata  # noqa: E402
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

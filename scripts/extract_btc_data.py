@@ -17,47 +17,50 @@ DATA_DIR = ROOT_DIR / "data"
 
 # Mapping: prefix bên trong zip → thư mục đích trong data/
 PREFIX_MAP = {
-    "clip-features-32": "clip-features",
-    "clip-features-16": "clip-features",
-    "clip-features":    "clip-features",
     "keyframes":        "keyframes",
     "map-keyframes":    "map-keyframes",
+    "mapkeyframes":     "map-keyframes",
     "media-info":       "media-info",
-    "objects":          "objects",
+    "videos":           "videos",
+    "video":            "videos",
 }
 
 
-def _detect_prefix(zip_path: Path) -> tuple[str, str]:
-    """Detect root prefix inside zip and map to target directory."""
+def _detect_prefix(zip_path: Path) -> tuple[str, str, bool]:
+    """Detect root prefix inside zip and map to target directory.
+    Returns: (root_prefix, target_dir_name, should_strip_prefix)
+    """
     with zipfile.ZipFile(zip_path) as zf:
+        # Kiểm tra xem có cấu trúc chuẩn kiểu `keyframes/L21_V001/...` không
         for name in zf.namelist():
             parts = name.split("/")
             if len(parts) >= 2 and parts[0]:
                 root_prefix = parts[0]
                 for known_prefix, target in PREFIX_MAP.items():
-                    if root_prefix == known_prefix or root_prefix.startswith(known_prefix):
-                        return root_prefix, target
-                # Fallback: dùng tên zip file để đoán
-                stem = zip_path.stem.lower()
-                for known_prefix, target in PREFIX_MAP.items():
-                    if known_prefix in stem:
-                        return root_prefix, target
-                return root_prefix, root_prefix
-    return "", ""
+                    # Nếu thư mục gốc thực sự tên là `keyframes` v.v. -> Strip nó đi
+                    if root_prefix == known_prefix or root_prefix.startswith(known_prefix + "-"):
+                        return root_prefix, target, True
+        
+        # Nếu không có thư mục gốc chuẩn, đoán qua tên file zip
+        stem = zip_path.stem.lower()
+        for known_prefix, target in PREFIX_MAP.items():
+            if known_prefix in stem:
+                return "", target, False  # Không strip gì cả, giữ nguyên cấu trúc bên trong
 
+    return "", "", False
 
 def extract_zip(zip_path: Path, dry_run: bool = False) -> int:
     """Extract one zip file to the correct data/ subdirectory."""
-    root_prefix, target_dir_name = _detect_prefix(zip_path)
-    if not root_prefix:
-        print(f"  SKIP: Could not detect prefix in {zip_path.name}")
+    root_prefix, target_dir_name, should_strip = _detect_prefix(zip_path)
+    if not target_dir_name:
+        print(f"  SKIP: Could not detect target dir for {zip_path.name}")
         return 0
 
     target_dir = DATA_DIR / target_dir_name
     target_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"  {zip_path.name}")
-    print(f"    zip prefix: '{root_prefix}/' -> target: data/{target_dir_name}/")
+    print(f"    Target: data/{target_dir_name}/" + (f" (Stripping root '{root_prefix}/')" if should_strip else " (Keeping internal structure)"))
 
     extracted = 0
     with zipfile.ZipFile(zip_path) as zf:
@@ -66,8 +69,8 @@ def extract_zip(zip_path: Path, dry_run: bool = False) -> int:
             if member.endswith("/"):
                 continue
 
-            # Strip root prefix: "clip-features-32/L21_V001.npy" → "L21_V001.npy"
-            if member.startswith(root_prefix + "/"):
+            # Strip root prefix nếu cần (ví dụ: "keyframes/L21_V001/001.jpg" → "L21_V001/001.jpg")
+            if should_strip and root_prefix and member.startswith(root_prefix + "/"):
                 relative = member[len(root_prefix) + 1:]
             else:
                 relative = member
