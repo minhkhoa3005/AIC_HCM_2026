@@ -110,11 +110,36 @@ def encode_clip_visual(clip_path: str) -> Optional[np.ndarray]:
 def encode_text(text: str) -> np.ndarray:
     import clip
     model, _ = _load_clip()
+    _, text_head = _load_projection_heads()
     text = text.strip() or "empty video segment"
     tok = clip.tokenize([text], truncate=True).to(DEVICE)
     with torch.no_grad():
         emb = model.encode_text(tok).float()
+        if text_head is not None:
+            emb = text_head(emb)
     return _normalize(emb.cpu().numpy())[0]
+
+
+def encode_texts(texts: list[str], batch_size: int = 64) -> list[np.ndarray]:
+    """Mã hoá hàng loạt chuỗi văn bản theo batch, CÓ áp dụng Projection Head (nếu đã fine-tune)."""
+    if not texts:
+        return []
+
+    import clip
+    model, _ = _load_clip()
+    _, text_head = _load_projection_heads()
+    
+    results = []
+    for i in range(0, len(texts), batch_size):
+        chunk = [t.strip() or "empty video segment" for t in texts[i : i + batch_size]]
+        tok = clip.tokenize(chunk, truncate=True).to(DEVICE)
+        with torch.no_grad():
+            emb = model.encode_text(tok).float()
+            if text_head is not None:
+                emb = text_head(emb)
+            normed = _normalize(emb.cpu().numpy())
+            results.extend(normed)
+    return results
 
 
 def encode_text_raw(text: str) -> np.ndarray:
