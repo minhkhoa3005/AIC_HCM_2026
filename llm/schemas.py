@@ -47,6 +47,14 @@ class QueryPlan(BaseModel):
     confidence: float = 0.5
 
 
+class IntentClassification(BaseModel):
+    """Task classification result before full query parsing."""
+
+    task_type: TaskType
+    confidence: float = 0.5
+    reason: str = ""
+
+
 class Candidate(BaseModel):
     """Retrieval candidate returned to the LLM/reranker layer."""
 
