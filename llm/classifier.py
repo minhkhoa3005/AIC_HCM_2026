@@ -58,7 +58,7 @@ TEXTUAL_SEARCH_KEYWORDS = (
     "tim khung hinh",
 )
 
-INTENT_FIELDS = ("task_type", "confidence", "reason")
+LIST_FIELDS = ("task_type", "confidence", "reason")
 
 
 def normalize_text(text: str) -> str:
@@ -67,14 +67,11 @@ def normalize_text(text: str) -> str:
     lowered = text.lower().strip()
     decomposed = unicodedata.normalize("NFD", lowered)
     without_marks = "".join(
-        char for char in decomposed if unicodedata.category(char) != "Mn"
+        char
+        for char in decomposed
+        if unicodedata.category(char) != "Mn"
     )
-    without_vietnamese_d = without_marks.replace("đ", "d").replace("Đ", "D")
-    return re.sub(r"\s+", " ", without_vietnamese_d)
-
-
-def _contains_keyword(text: str, keyword: str) -> bool:
-    return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
+    return re.sub(r"\s+", " ", without_marks)
 
 
 def validate_intent_classification(raw_result: dict[str, Any]) -> IntentClassification:
@@ -108,9 +105,7 @@ def validate_intent_classification(raw_result: dict[str, Any]) -> IntentClassifi
         result["reason"] = ""
 
     try:
-        return IntentClassification(
-            **{key: result.get(key) for key in INTENT_FIELDS}
-        )
+        return IntentClassification(**{key: result.get(key) for key in LIST_FIELDS})
     except ValidationError as exc:
         raise ValueError(f"Invalid IntentClassification payload: {exc}") from exc
 
@@ -123,17 +118,16 @@ def classify_intent(query: str) -> IntentClassification:
 
     normalized = normalize_text(query)
     has_question_mark = "?" in query
-    has_question_keyword = any(
-        _contains_keyword(normalized, keyword) for keyword in QUESTION_KEYWORDS
-    )
-    has_trake_keyword = any(
-        _contains_keyword(normalized, keyword) for keyword in TRAKE_KEYWORDS
-    )
+    has_question_keyword = any(keyword in normalized for keyword in QUESTION_KEYWORDS)
+    has_trake_keyword = any(keyword in normalized for keyword in TRAKE_KEYWORDS)
     has_temporal_connector = any(
-        _contains_keyword(normalized, connector) for connector in TEMPORAL_CONNECTORS
+        re.search(rf"\b{re.escape(connector)}\b", normalized)
+        for connector in TEMPORAL_CONNECTORS
     )
     comma_count = normalized.count(",")
-    has_search_keyword = any(keyword in normalized for keyword in TEXTUAL_SEARCH_KEYWORDS)
+    has_search_keyword = any(
+        keyword in normalized for keyword in TEXTUAL_SEARCH_KEYWORDS
+    )
 
     if has_trake_keyword and (has_temporal_connector or comma_count >= 1):
         return IntentClassification(
@@ -142,25 +136,18 @@ def classify_intent(query: str) -> IntentClassification:
             reason="Query asks for an ordered sequence of events.",
         )
 
-    if has_temporal_connector and comma_count >= 1:
-        return IntentClassification(
-            task_type=TaskType.TRAKE,
-            confidence=0.78,
-            reason="Query contains multiple temporal actions.",
-        )
-
-    if has_search_keyword and comma_count >= 2:
-        return IntentClassification(
-            task_type=TaskType.TRAKE,
-            confidence=0.74,
-            reason="Query contains a multi-step visual sequence.",
-        )
-
     if has_question_mark or has_question_keyword:
         return IntentClassification(
             task_type=TaskType.QA,
             confidence=0.88,
             reason="Query asks for an answer after locating visual evidence.",
+        )
+
+    if has_temporal_connector and comma_count >= 1:
+        return IntentClassification(
+            task_type=TaskType.TRAKE,
+            confidence=0.78,
+            reason="Query contains multiple temporal actions.",
         )
 
     if has_search_keyword:
