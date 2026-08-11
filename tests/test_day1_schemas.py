@@ -64,7 +64,7 @@ def test_candidate_schema_and_json_round_trip():
         objects=["person", "car", "door"],
     )
 
-    payload = json.loads(candidate.json())
+    payload = json.loads(candidate.model_dump_json())
     recreated = Candidate(**payload)
 
     assert recreated.video_id == "L01_V001"
@@ -86,7 +86,7 @@ def test_query_plan_json_round_trip():
         confidence=0.86,
     )
 
-    recreated = QueryPlan(**json.loads(plan.json()))
+    recreated = QueryPlan(**json.loads(plan.model_dump_json()))
 
     assert recreated.task_type == TaskType.TEXTUAL_KIS
     assert recreated.entities[0].actions[0].target == "vach sang duong"
