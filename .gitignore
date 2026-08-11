@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Local/editor
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs/env
+*.log
+.env
+.env.*
+
+# Large/raw local materials
+*.pdf
+*.pptx
+*.ppt
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Existing local notes/docs only
+10daysAIC.md
+Day1.txt
+llm_day1_schema_interface.md
+NOTE AIC Buổi 2.txt
+NOTE AIC Buổi 3.txt
+NOTE TẬP HUẤN AI CHALLENGE 2026 - LẦN 1.md
