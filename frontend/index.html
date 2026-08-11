@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AIC 2026 Video Search Agent</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a20; --panel-2:#20242d; --line:#303744;
+    --ink:#f4f1ea; --muted:#aab0bb; --accent:#43c6ac; --accent-2:#f5b45f;
+    --danger:#ff7a7a; --mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+    --sans:"Inter","Segoe UI",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--sans)}
+  header{padding:28px 24px 18px;border-bottom:1px solid var(--line)}
+  .topbar{max-width:1160px;margin:0 auto;display:flex;justify-content:space-between;gap:18px;align-items:flex-end}
+  .brand{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:9px}
+  h1{font-size:30px;line-height:1.12;margin:0;font-weight:680}
+  .sub{max-width:700px;margin:9px 0 0;color:var(--muted);line-height:1.5}
+  .api{font:12px var(--mono);color:var(--muted);white-space:nowrap}
+  main{max-width:1160px;margin:0 auto;padding:22px 20px 72px}
+  .toolbar{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+  .modes{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .mode{background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:9px 12px;font-weight:650;cursor:pointer}
+  .mode.active{background:var(--accent);border-color:var(--accent);color:#061411}
+  input,select{width:100%;background:#0c0e12;border:1px solid var(--line);border-radius:6px;color:var(--ink);font:15px var(--sans);padding:11px 12px;outline:none}
+  input:focus,select:focus{border-color:var(--accent)}
+  .search-row{display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:10px}
+  .qa-row{display:none;margin-top:10px}
+  .side{display:grid;gap:10px}
+  button{border:0;border-radius:6px;background:var(--accent);color:#061411;font-weight:750;padding:11px 14px;cursor:pointer;white-space:nowrap}
+  button.secondary{background:var(--panel-2);color:var(--ink);border:1px solid var(--line)}
+  button:disabled{opacity:.55;cursor:default}
+  .status{font:13px var(--mono);color:var(--muted);margin:18px 0 14px}
+  .content{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,440px);gap:16px;align-items:start}
+  .results{display:flex;flex-direction:column;gap:10px}
+  .card,.player,.clarify{background:var(--panel);border:1px solid var(--line);border-radius:8px}
+  .card{padding:14px;cursor:pointer}
+  .card:hover,.card.active{border-color:var(--accent)}
+  .card-top{display:flex;justify-content:space-between;gap:14px;align-items:baseline}
+  .title{font-weight:680}
+  .score{font:12px var(--mono);color:var(--accent-2)}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:9px;font:12px var(--mono);color:var(--muted)}
+  .text{margin-top:10px;color:#d8d4cc;line-height:1.5;font-size:14px}
+  .submission{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:12px}
+  .submission code{display:block;overflow:auto;background:#0c0e12;border:1px solid var(--line);border-radius:6px;padding:9px 10px;font:12px var(--mono);color:#e9e2d7}
+  .player{display:none;position:sticky;top:16px;padding:12px}
+  video{width:100%;display:block;background:#000;border:1px solid var(--line);border-radius:6px}
+  .panel-title{font:12px var(--mono);color:var(--muted);margin:0 0 10px}
+  .selected{margin-top:12px;font:13px var(--mono);color:var(--accent)}
+  .clarify{display:none;margin-bottom:14px;padding:14px;border-color:#376e69;background:#121f1d}
+  .clarify-label{font:11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .clarify p{margin:0 0 12px;line-height:1.45}
+  .options{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+  .option{background:var(--panel-2);color:var(--ink);text-align:left;border:1px solid var(--line)}
+  .hint{display:block;margin-top:4px;color:var(--muted);font-size:12px;font-weight:400}
+  .freeform{display:flex;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+  .empty{padding:42px 16px;text-align:center;color:var(--muted);font:13px var(--mono);border:1px dashed var(--line);border-radius:8px}
+  @media (max-width:860px){
+    .topbar,.content{display:block}
+    .api{margin-top:12px}
+    .toolbar,.search-row{grid-template-columns:1fr}
+    .player{position:static;margin-top:16px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div>
+      <div class="brand">AIC 2026 sơ tuyển</div>
+      <h1>Tìm video, chọn frame, xuất dòng nộp bài</h1>
+      <p class="sub">Hỗ trợ ba dạng truy vấn trong đề: Textual KIS, Q&A và TRAKE. Kết quả ưu tiên frame ứng viên để copy theo định dạng chấm điểm.</p>
+    </div>
+    <div class="api">API: <span id="apiBase"></span></div>
+  </div>
+</header>
+
+<main>
+  <section class="toolbar">
+    <div>
+      <div class="modes" id="modes">
+        <button class="mode active" data-mode="kis">Textual KIS</button>
+        <button class="mode" data-mode="qa">Q&A</button>
+        <button class="mode" data-mode="trake">TRAKE</button>
+      </div>
+      <div class="search-row">
+        <input id="query" type="text" placeholder="Mô tả sự kiện cần tìm..." autofocus />
+        <select id="topK">
+          <option value="20">Top 20</option>
+          <option value="50">Top 50</option>
+          <option value="100">Top 100</option>
+          <option value="5">Top 5</option>
+          <option value="1">Top 1</option>
+        </select>
+      </div>
+      <div class="qa-row" id="qaRow">
+        <input id="answer" type="text" placeholder="Câu trả lời Q&A, có thể điền sau khi xem video..." />
+      </div>
+    </div>
+    <div class="side">
+      <button id="searchBtn">Tìm kiếm</button>
+      <button class="secondary" id="copyAllBtn" disabled>Copy top</button>
+    </div>
+  </section>
+
+  <div class="status" id="status">Nhập mô tả rồi nhấn Enter hoặc Tìm kiếm.</div>
+  <div class="clarify" id="clarify"></div>
+
+  <section class="content">
+    <div class="results" id="results"></div>
+    <aside class="player" id="player">
+      <p class="panel-title">Xem lại khoảnh khắc</p>
+      <video id="videoEl" controls></video>
+      <div class="selected" id="selected"></div>
+    </aside>
+  </section>
+</main>
+
+<script>
+const API_BASE = "http://localhost:8000";
+document.getElementById("apiBase").textContent = API_BASE;
+
+const queryEl = document.getElementById("query");
+const answerEl = document.getElementById("answer");
+const topKEl = document.getElementById("topK");
+const btnEl = document.getElementById("searchBtn");
+const copyAllBtn = document.getElementById("copyAllBtn");
+const statusEl = document.getElementById("status");
+const clarifyEl = document.getElementById("clarify");
+const resultsEl = document.getElementById("results");
+const playerEl = document.getElementById("player");
+const videoEl = document.getElementById("videoEl");
+const selectedEl = document.getElementById("selected");
+const qaRow = document.getElementById("qaRow");
+let mode = "kis";
+let originalQuery = "";
+let latestResults = [];
+
+function fmtTime(sec){
+  const s = Math.floor(sec % 60).toString().padStart(2, "0");
+  const m = Math.floor((sec / 60) % 60).toString().padStart(2, "0");
+  const h = Math.floor(sec / 3600).toString().padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+function escapeHtml(s){
+  const div = document.createElement("div");
+  div.textContent = s || "";
+  return div.innerHTML;
+}
+
+function setMode(nextMode){
+  mode = nextMode;
+  document.querySelectorAll(".mode").forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
+  qaRow.style.display = mode === "qa" ? "block" : "none";
+  queryEl.placeholder = mode === "trake"
+    ? "Mô tả chuỗi sự kiện hoặc các khoảnh khắc cần căn chỉnh..."
+    : "Mô tả sự kiện cần tìm...";
+}
+
+async function runSearch(){
+  const query = queryEl.value.trim();
+  if(!query) return;
+  originalQuery = query;
+  await doSearch(query, null);
+}
+
+async function doSearch(query, clarificationAnswer){
+  btnEl.disabled = true;
+  copyAllBtn.disabled = true;
+  statusEl.textContent = "Đang tìm kiếm...";
+  clarifyEl.style.display = "none";
+  clarifyEl.innerHTML = "";
+  resultsEl.innerHTML = "";
+  latestResults = [];
+
+  try{
+    const params = new URLSearchParams({
+      query,
+      top_k: topKEl.value,
+      task_type: mode,
+    });
+    if(mode === "qa" && answerEl.value.trim()) params.set("answer", answerEl.value.trim());
+    if(clarificationAnswer) params.set("clarification_answer", clarificationAnswer);
+
+    const res = await fetch(`${API_BASE}/search?${params.toString()}`);
+    if(!res.ok) throw new Error(`API lỗi ${res.status}`);
+    const data = await res.json();
+    latestResults = data.results || [];
+    if(data.needs_clarification && data.clarification) renderClarification(data.clarification);
+    renderResults(latestResults, query, data.needs_clarification);
+  }catch(err){
+    statusEl.textContent = `Không thể kết nối API tại ${API_BASE}. Chi tiết: ${err.message}`;
+  }finally{
+    btnEl.disabled = false;
+  }
+}
+
+function renderClarification(clarification){
+  clarifyEl.style.display = "block";
+  clarifyEl.innerHTML = `
+    <div class="clarify-label">Cần làm rõ</div>
+    <p>${escapeHtml(clarification.question)}</p>
+    <div class="options">
+      ${clarification.candidates.map((c, i) => `
+        <button class="option" data-idx="${i}">
+          ${escapeHtml(c.label)}
+          ${c.hint ? `<span class="hint">${escapeHtml(c.hint)}</span>` : ""}
+        </button>
+      `).join("")}
+    </div>
+    <div class="freeform">
+      <input id="clarifyInput" type="text" placeholder="Hoặc mô tả rõ hơn..." />
+      <button id="clarifySubmit">Gửi</button>
+    </div>
+  `;
+
+  clarifyEl.querySelectorAll(".option").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const candidate = clarification.candidates[btn.dataset.idx];
+      clarifyEl.style.display = "none";
+      playClip(candidate);
+    });
+  });
+
+  const submit = () => {
+    const answer = document.getElementById("clarifyInput").value.trim();
+    if(answer) doSearch(originalQuery, answer);
+  };
+  document.getElementById("clarifySubmit").addEventListener("click", submit);
+  document.getElementById("clarifyInput").addEventListener("keydown", e => {
+    if(e.key === "Enter") submit();
+  });
+}
+
+function renderResults(results, query, needsClarification){
+  if(!results.length){
+    statusEl.textContent = `Không tìm thấy kết quả cho "${query}".`;
+    resultsEl.innerHTML = `<div class="empty">Hãy thử mô tả cụ thể hơn hoặc dùng từ khóa xuất hiện trong lời thoại, vật thể, hành động.</div>`;
+    return;
+  }
+
+  copyAllBtn.disabled = false;
+  statusEl.textContent = needsClarification
+    ? `${results.length} kết quả gần đúng. Chọn gợi ý hoặc copy dòng nộp phù hợp.`
+    : `${results.length} kết quả cho "${query}"`;
+
+  resultsEl.innerHTML = results.map((r, i) => `
+    <article class="card" data-idx="${i}">
+      <div class="card-top">
+        <div class="title">#${i + 1} ${escapeHtml(r.video_title)}</div>
+        <div class="score">match ${(r.score * 100).toFixed(1)}%</div>
+      </div>
+      <div class="meta">
+        <span>${fmtTime(r.start)} - ${fmtTime(r.end)}</span>
+        <span>frame ${r.frame_id}</span>
+        <span>${escapeHtml(r.clip_id)}</span>
+      </div>
+      ${r.text ? `<div class="text">${escapeHtml(r.text)}</div>` : ""}
+      <div class="submission">
+        <code>${escapeHtml(r.submission)}</code>
+        <button class="secondary copy-one" data-idx="${i}">Copy</button>
+      </div>
+    </article>
+  `).join("");
+
+  document.querySelectorAll(".card").forEach(card => {
+    card.addEventListener("click", event => {
+      if(event.target.classList.contains("copy-one")) return;
+      document.querySelectorAll(".card").forEach(item => item.classList.remove("active"));
+      card.classList.add("active");
+      playClip(results[card.dataset.idx]);
+    });
+  });
+
+  document.querySelectorAll(".copy-one").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(results[btn.dataset.idx].submission);
+      btn.textContent = "Đã copy";
+      setTimeout(() => btn.textContent = "Copy", 900);
+    });
+  });
+
+  document.querySelector(".card")?.click();
+}
+
+function playClip(result){
+  playerEl.style.display = "block";
+  videoEl.src = `${API_BASE}/videos/${encodeURIComponent(result.video_id)}#t=${result.start},${result.end}`;
+  videoEl.currentTime = result.start;
+  selectedEl.textContent = `${result.video_id}, frame ${result.frame_id}`;
+  videoEl.play().catch(() => {});
+}
+
+document.getElementById("modes").addEventListener("click", event => {
+  if(event.target.dataset.mode) setMode(event.target.dataset.mode);
+});
+btnEl.addEventListener("click", runSearch);
+copyAllBtn.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(latestResults.map(r => r.submission).join("\n"));
+  copyAllBtn.textContent = "Đã copy";
+  setTimeout(() => copyAllBtn.textContent = "Copy top", 900);
+});
+queryEl.addEventListener("keydown", e => { if(e.key === "Enter") runSearch(); });
+answerEl.addEventListener("keydown", e => { if(e.key === "Enter") runSearch(); });
+</script>
+</body>
+</html>

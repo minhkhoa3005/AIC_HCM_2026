@@ -1,0 +1,23 @@
+# Environment variables (Credentials)
+.env
+
+# Data and Models
+data/
+ZIP/
+*.pt
+*.index
+*.jsonl
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+
+# Agent and Jupyter files
+.codex/
+.ipynb_checkpoints/
