@@ -285,7 +285,7 @@ def main():
     client = step3_push_to_qdrant(limit=limit)
 
     # 4. Search & Output Artifact (Score + Images)
-    step4_query_and_generate_artifact(client, query_text="a photo of a tree")
+    step4_query_and_generate_artifact(client, query_text="một bức ảnh về cái cây")
 
 
 if __name__ == "__main__":

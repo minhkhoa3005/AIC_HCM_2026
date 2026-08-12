@@ -128,10 +128,36 @@ def encode_clip_visual(clip_path: str) -> Optional[np.ndarray]:
     return encode_images(extract_keyframes(clip_path))
 
 
-def encode_text(text: str) -> np.ndarray:
+def translate_vi_to_en(text: str) -> str:
+    """Tự động dịch Tiếng Việt sang Tiếng Anh để tối ưu hoá cho mô hình CLIP gốc."""
+    if not text or not text.strip():
+        return text
+    
+    try:
+        from deep_translator import GoogleTranslator
+        import re
+        
+        # Kiểm tra sơ bộ xem có ký tự tiếng Việt không
+        if re.search(r'[àáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]', text.lower()):
+            translated = GoogleTranslator(source='vi', target='en').translate(text)
+            import logging
+            logging.getLogger(__name__).info(f"Translated query: '{text}' -> '{translated}'")
+            return translated
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Translation failed: {e}. Fallback to original text.")
+    
+    return text
+
+
+def encode_text(text: str, translate: bool = True) -> np.ndarray:
     import clip
     model, _ = _load_clip()
     _, text_head = _load_projection_heads()
+    
+    if translate:
+        text = translate_vi_to_en(text)
+        
     text = text.strip() or "empty video segment"
     tok = clip.tokenize([text], truncate=True).to(DEVICE)
     with torch.no_grad():
@@ -163,15 +189,18 @@ def encode_texts(texts: list[str], batch_size: int = 64) -> list[np.ndarray]:
     return results
 
 
-def encode_text_raw(text: str) -> np.ndarray:
+def encode_text_raw(text: str, translate: bool = True) -> np.ndarray:
     """Encode text qua CLIP ONLY, KHÔNG áp dụng Projection Head.
 
-    Dùng cho training data preparation để tránh signal leakage (double projection)
-    khi train lại Projection Head từ checkpoint cũ.
+    Dùng cho training data preparation hoặc search raw.
     """
     import clip
 
     model, _ = _load_clip()
+    
+    if translate:
+        text = translate_vi_to_en(text)
+        
     text = text.strip() or "empty video segment"
     tok = clip.tokenize([text], truncate=True).to(DEVICE)
     with torch.no_grad():
