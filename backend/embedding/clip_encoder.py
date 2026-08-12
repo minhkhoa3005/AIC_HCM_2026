@@ -11,9 +11,13 @@ from backend.config import (
     CLIP_MODEL_NAME,
     DEVICE,
     KEYFRAME_POSITIONS,
+    LORA_ALPHA,
+    LORA_RANK,
+    LORA_WEIGHTS_PATH,
     PROJECTED_DIM,
     PROJECTION_HEAD_PATH,
     TEXT_EMBED_WEIGHT,
+    USE_LORA,
     VISUAL_EMBED_WEIGHT,
 )
 from backend.training.model import ProjectionHead
@@ -25,6 +29,23 @@ def _load_clip():
 
     model, preprocess = clip.load(CLIP_MODEL_NAME, device=DEVICE)
     model.eval()
+
+    # Auto-load LoRA nếu có trained weights
+    _should_use_lora = (
+        (USE_LORA == "auto" and LORA_WEIGHTS_PATH.exists())
+        or USE_LORA == "true"
+    )
+    if _should_use_lora and LORA_WEIGHTS_PATH.exists():
+        from backend.training.lora import load_lora_weights
+
+        load_lora_weights(model, LORA_WEIGHTS_PATH)
+        model.eval()
+        import logging
+        logging.getLogger(__name__).info(
+            "Loaded LoRA-CLIP from %s (rank=%d, alpha=%.1f)",
+            LORA_WEIGHTS_PATH, LORA_RANK, LORA_ALPHA,
+        )
+
     return model, preprocess
 
 

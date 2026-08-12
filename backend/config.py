@@ -36,6 +36,12 @@ SCENE_METADATA_PATH = INDEX_DIR / "scene_metadata.json"
 PROJECTION_HEAD_PATH = INDEX_DIR / "projection_head.pt"
 TRAIN_PAIRS_PATH = INDEX_DIR / "train_pairs.jsonl"
 
+# LoRA Fine-tune
+LORA_WEIGHTS_PATH = INDEX_DIR / "lora_weights.pt"
+LORA_RANK = int(os.getenv("LORA_RANK", "4"))
+LORA_ALPHA = float(os.getenv("LORA_ALPHA", "1.0"))
+USE_LORA = os.getenv("USE_LORA", "auto").lower()  # "auto" | "true" | "false"
+
 # BTC Data Directories
 KEYFRAMES_DIR = ROOT_DIR / "data" / "keyframes"
 BTC_MEDIA_INFO_DIR = ROOT_DIR / "data" / "media-info"
@@ -44,15 +50,31 @@ BTC_OBJECTS_DIR = ROOT_DIR / "data" / "objects"
 BTC_CLIP_FEATURES_DIR = ROOT_DIR / "data" / "clip-features"
 
 # Preprocessing / Whisper Transcribe
-WHISPER_MODEL_SIZE = "base"
-WHISPER_DEVICE = "cpu"
-WHISPER_COMPUTE_TYPE = "int8"
-WHISPER_LANGUAGE = "vi"
+WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
+WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
+WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "vi")
 
 # Embedding / CLIP Model
-CLIP_MODEL_NAME = "ViT-B/32"
+CLIP_MODEL_NAME = os.getenv("CLIP_MODEL_NAME", "ViT-B/32")
 import torch
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+def _get_default_device():
+    env_dev = os.getenv("DEVICE")
+    if env_dev:
+        if env_dev.lower() in ("dml", "directml"):
+            import torch_directml
+            return torch_directml.device()
+        return env_dev
+    try:
+        import torch_directml
+        if torch_directml.is_available():
+            return torch_directml.device()
+    except ImportError:
+        pass
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+DEVICE = _get_default_device()
 TEMPORAL_CHECKPOINT_PATH = INDEX_DIR / "temporal_encoder.pt"
 EMBED_DIM = 512
 PROJECTED_DIM = 256
