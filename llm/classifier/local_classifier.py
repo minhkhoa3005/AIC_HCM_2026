@@ -1,9 +1,4 @@
-"""Intent classification for Day 2.
-
-The classifier is intentionally deterministic first. A later LLM/API classifier
-can reuse the same output schema and fall back to this module when confidence is
-high enough.
-"""
+"""Local deterministic intent classifier."""
 
 from __future__ import annotations
 
@@ -14,8 +9,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from .schemas import IntentClassification
-from .task_types import TaskType
+from ..schemas import IntentClassification
+from ..task_types import TaskType
 
 QUESTION_KEYWORDS = (
     "bao nhieu",
@@ -68,24 +63,14 @@ def normalize_text(text: str) -> str:
     lowered = text.lower().strip()
     decomposed = unicodedata.normalize("NFD", lowered)
     without_marks = "".join(
-        char
-        for char in decomposed
-        if unicodedata.category(char) != "Mn"
+        char for char in decomposed if unicodedata.category(char) != "Mn"
     )
-    without_vietnamese_d = without_marks.replace("đ", "d").replace("Đ", "D")
+    without_vietnamese_d = without_marks.replace("Ä‘", "d").replace("Ä", "D")
     return re.sub(r"\s+", " ", without_vietnamese_d)
 
 
-def _contains_keyword(text: str, keyword: str) -> bool:
-    return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
-
-
 def validate_intent_classification(raw_result: dict[str, Any]) -> IntentClassification:
-    """Validate and lightly repair classifier output.
-
-    Day 2 does not guess invalid task types. Missing confidence defaults to 0.5,
-    and numeric confidence is clamped to [0, 1].
-    """
+    """Validate and lightly repair classifier output."""
 
     if not isinstance(raw_result, dict):
         raise TypeError("Intent classification payload must be a dict")
@@ -111,9 +96,7 @@ def validate_intent_classification(raw_result: dict[str, Any]) -> IntentClassifi
         result["reason"] = ""
 
     try:
-        return IntentClassification(
-            **{key: result.get(key) for key in INTENT_FIELDS}
-        )
+        return IntentClassification(**{key: result.get(key) for key in INTENT_FIELDS})
     except ValidationError as exc:
         raise ValueError(f"Invalid IntentClassification payload: {exc}") from exc
 
@@ -136,9 +119,7 @@ def classify_intent(query: str) -> IntentClassification:
         _contains_keyword(normalized, connector) for connector in TEMPORAL_CONNECTORS
     )
     comma_count = normalized.count(",")
-    has_search_keyword = any(
-        keyword in normalized for keyword in TEXTUAL_SEARCH_KEYWORDS
-    )
+    has_search_keyword = any(keyword in normalized for keyword in TEXTUAL_SEARCH_KEYWORDS)
 
     if has_trake_keyword and (has_temporal_connector or comma_count >= 1):
         return IntentClassification(
@@ -180,3 +161,7 @@ def classify_intent(query: str) -> IntentClassification:
         confidence=0.55,
         reason="Fallback to visual search because no QA or TRAKE signal was found.",
     )
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    return re.search(rf"\b{re.escape(keyword)}\b", text) is not None
