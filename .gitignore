@@ -1,0 +1,44 @@
+# Environment variables (Credentials)
+.env
+
+# Data, Features & Models (Large Files)
+data/
+ZIP/
+input/
+output/
+*.pt
+*.index
+*.jsonl
+*.npy
+
+# Media & Archives
+*.mp4
+*.avi
+*.mkv
+*.zip
+*.tar
+*.gz
+
+# Test Suite Reports & Output Artifacts
+*.html
+*.csv
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+
+# Agent and Jupyter files
+.codex/
+.ipynb_checkpoints/
+
+# Virtual Environments
+AIC_HCM_2026/venv/
+**/venv/
+**/.venv/

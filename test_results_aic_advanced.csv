@@ -1,0 +1,61 @@
+Level_Category,Query,Latency_ms,Rank,Similarity_Score,Video_ID,Frame_ID,PTS_Seconds,Formatted_Time
+Level 1: Nhận diện Tĩnh (Basic Scene),A wide shot of a flooded city street,4321.22,1,0.3212,L22_V030,11635,465.40,07:45
+Level 1: Nhận diện Tĩnh (Basic Scene),A wide shot of a flooded city street,4321.22,2,0.3195,L21_V017,4270,170.80,02:50
+Level 1: Nhận diện Tĩnh (Basic Scene),A wide shot of a flooded city street,4321.22,3,0.3176,L21_V017,4125,165.00,02:45
+Level 1: Nhận diện Tĩnh (Basic Scene),A wide shot of a flooded city street,4321.22,4,0.3175,L21_V017,4055,162.20,02:42
+Level 1: Nhận diện Tĩnh (Basic Scene),A wide shot of a flooded city street,4321.22,5,0.3168,L21_V017,4730,189.20,03:09
+Level 1: Nhận diện Tĩnh (Basic Scene),A close-up shot of a person's hands,252.49,1,0.2869,L22_V012,35442,1181.40,19:41
+Level 1: Nhận diện Tĩnh (Basic Scene),A close-up shot of a person's hands,252.49,2,0.2864,L22_V025,27594,919.80,15:19
+Level 1: Nhận diện Tĩnh (Basic Scene),A close-up shot of a person's hands,252.49,3,0.2829,L22_V025,6240,208.00,03:28
+Level 1: Nhận diện Tĩnh (Basic Scene),A close-up shot of a person's hands,252.49,4,0.2825,L22_V025,27594,919.80,15:19
+Level 1: Nhận diện Tĩnh (Basic Scene),A close-up shot of a person's hands,252.49,5,0.2823,L22_V025,27564,918.80,15:18
+Level 1: Nhận diện Tĩnh (Basic Scene),A news anchor sitting at a desk in a studio,254.38,1,0.3108,L21_V010,28205,1128.20,18:48
+Level 1: Nhận diện Tĩnh (Basic Scene),A news anchor sitting at a desk in a studio,254.38,2,0.3099,L21_V002,11118,370.60,06:10
+Level 1: Nhận diện Tĩnh (Basic Scene),A news anchor sitting at a desk in a studio,254.38,3,0.3094,L22_V008,27290,1091.60,18:11
+Level 1: Nhận diện Tĩnh (Basic Scene),A news anchor sitting at a desk in a studio,254.38,4,0.3089,L22_V016,10135,405.40,06:45
+Level 1: Nhận diện Tĩnh (Basic Scene),A news anchor sitting at a desk in a studio,254.38,5,0.3071,L22_V001,20538,684.60,11:24
+Level 2: Tương tác & Hành động (Action),A reporter holding a microphone and talking to a local resident,250.12,1,0.3300,L22_V004,2826,94.20,01:34
+Level 2: Tương tác & Hành động (Action),A reporter holding a microphone and talking to a local resident,250.12,2,0.3235,L22_V025,26532,884.40,14:44
+Level 2: Tương tác & Hành động (Action),A reporter holding a microphone and talking to a local resident,250.12,3,0.3211,L22_V018,2490,83.00,01:23
+Level 2: Tương tác & Hành động (Action),A reporter holding a microphone and talking to a local resident,250.12,4,0.3163,L22_V018,2472,82.40,01:22
+Level 2: Tương tác & Hành động (Action),A reporter holding a microphone and talking to a local resident,250.12,5,0.3134,L22_V024,7465,298.60,04:58
+Level 2: Tương tác & Hành động (Action),Medical staff guiding citizens at a hospital,252.90,1,0.3227,L21_V018,1750,70.00,01:10
+Level 2: Tương tác & Hành động (Action),Medical staff guiding citizens at a hospital,252.90,2,0.3180,L21_V014,8160,272.00,04:32
+Level 2: Tương tác & Hành động (Action),Medical staff guiding citizens at a hospital,252.90,3,0.3174,L21_V011,1970,78.80,01:18
+Level 2: Tương tác & Hành động (Action),Medical staff guiding citizens at a hospital,252.90,4,0.3151,L22_V020,2142,71.40,01:11
+Level 2: Tương tác & Hành động (Action),Medical staff guiding citizens at a hospital,252.90,5,0.3139,L22_V003,11270,450.80,07:30
+Level 2: Tương tác & Hành động (Action),Police officers directing traffic in the rain,249.13,1,0.3201,L21_V001,37362,1245.40,20:45
+Level 2: Tương tác & Hành động (Action),Police officers directing traffic in the rain,249.13,2,0.3191,L21_V001,37362,1245.40,20:45
+Level 2: Tương tác & Hành động (Action),Police officers directing traffic in the rain,249.13,3,0.3174,L21_V029,33726,1124.20,18:44
+Level 2: Tương tác & Hành động (Action),Police officers directing traffic in the rain,249.13,4,0.3097,L22_V027,17586,586.20,09:46
+Level 2: Tương tác & Hành động (Action),Police officers directing traffic in the rain,249.13,5,0.3075,L22_V012,26124,870.80,14:30
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),An elderly woman wearing a conical hat and carrying vegetables on a bicycle,259.14,1,0.2806,L22_V027,30522,1017.40,16:57
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),An elderly woman wearing a conical hat and carrying vegetables on a bicycle,259.14,2,0.2781,L21_V021,1560,52.00,00:52
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),An elderly woman wearing a conical hat and carrying vegetables on a bicycle,259.14,3,0.2767,L21_V021,1584,52.80,00:52
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),An elderly woman wearing a conical hat and carrying vegetables on a bicycle,259.14,4,0.2758,L21_V021,1608,53.60,00:53
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),An elderly woman wearing a conical hat and carrying vegetables on a bicycle,259.14,5,0.2738,L21_V011,7810,312.40,05:12
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),A person wearing a blue shirt typing on a laptop keyboard in a dark room,250.51,1,0.3309,L22_V012,31320,1044.00,17:24
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),A person wearing a blue shirt typing on a laptop keyboard in a dark room,250.51,2,0.3168,L22_V012,24594,819.80,13:39
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),A person wearing a blue shirt typing on a laptop keyboard in a dark room,250.51,3,0.3013,L22_V008,9480,379.20,06:19
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),A person wearing a blue shirt typing on a laptop keyboard in a dark room,250.51,4,0.2941,L22_V026,29196,973.20,16:13
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),A person wearing a blue shirt typing on a laptop keyboard in a dark room,250.51,5,0.2936,L21_V028,24684,822.80,13:42
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),Exactly two cars crashed into each other on the highway,250.95,1,0.3334,L22_V031,28955,1158.20,19:18
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),Exactly two cars crashed into each other on the highway,250.95,2,0.3326,L22_V012,25914,863.80,14:23
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),Exactly two cars crashed into each other on the highway,250.95,3,0.3315,L22_V031,28840,1153.60,19:13
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),Exactly two cars crashed into each other on the highway,250.95,4,0.3315,L22_V026,33450,1115.00,18:35
+Level 3: Ràng buộc Đa điều kiện (Multi-constraint),Exactly two cars crashed into each other on the highway,250.95,5,0.3302,L22_V012,25944,864.80,14:24
+Level 4: Trừu tượng & Báo chí (Abstract/Context),A crowded press conference with many camera flashes,252.74,1,0.3141,L21_V023,1932,64.40,01:04
+Level 4: Trừu tượng & Báo chí (Abstract/Context),A crowded press conference with many camera flashes,252.74,2,0.3084,L22_V016,21880,875.20,14:35
+Level 4: Trừu tượng & Báo chí (Abstract/Context),A crowded press conference with many camera flashes,252.74,3,0.3081,L21_V023,3414,113.80,01:53
+Level 4: Trừu tượng & Báo chí (Abstract/Context),A crowded press conference with many camera flashes,252.74,4,0.3078,L21_V022,6726,224.20,03:44
+Level 4: Trừu tượng & Báo chí (Abstract/Context),A crowded press conference with many camera flashes,252.74,5,0.3024,L22_V016,21805,872.20,14:32
+Level 4: Trừu tượng & Báo chí (Abstract/Context),"A graph, pie chart or data visualization on a digital screen",253.27,1,0.3098,L22_V013,7338,244.60,04:04
+Level 4: Trừu tượng & Báo chí (Abstract/Context),"A graph, pie chart or data visualization on a digital screen",253.27,2,0.3010,L22_V011,20706,690.20,11:30
+Level 4: Trừu tượng & Báo chí (Abstract/Context),"A graph, pie chart or data visualization on a digital screen",253.27,3,0.2923,L21_V012,17304,576.80,09:36
+Level 4: Trừu tượng & Báo chí (Abstract/Context),"A graph, pie chart or data visualization on a digital screen",253.27,4,0.2906,L22_V027,12864,428.80,07:08
+Level 4: Trừu tượng & Báo chí (Abstract/Context),"A graph, pie chart or data visualization on a digital screen",253.27,5,0.2885,L21_V029,1056,35.20,00:35
+Level 4: Trừu tượng & Báo chí (Abstract/Context),Black and white surveillance CCTV camera footage showing a street robbery,250.39,1,0.3434,L22_V031,22460,898.40,14:58
+Level 4: Trừu tượng & Báo chí (Abstract/Context),Black and white surveillance CCTV camera footage showing a street robbery,250.39,2,0.3352,L22_V031,22805,912.20,15:12
+Level 4: Trừu tượng & Báo chí (Abstract/Context),Black and white surveillance CCTV camera footage showing a street robbery,250.39,3,0.3311,L22_V031,22670,906.80,15:06
+Level 4: Trừu tượng & Báo chí (Abstract/Context),Black and white surveillance CCTV camera footage showing a street robbery,250.39,4,0.3245,L22_V031,23010,920.40,15:20
+Level 4: Trừu tượng & Báo chí (Abstract/Context),Black and white surveillance CCTV camera footage showing a street robbery,250.39,5,0.3187,L22_V031,23070,922.80,15:22
