@@ -189,24 +189,15 @@ def search_remote(
         )
 
     try:
-        # Use query_points for qdrant-client >= 1.7
-        if hasattr(client, "query_points"):
-            response = client.query_points(
-                collection_name=collection_name,
-                query=query_vec_list,
-                limit=top_k,
-                query_filter=query_filter,
-                with_payload=True,
-            )
-            hits = response.points
-        else:
-            hits = client.search(
-                collection_name=collection_name,
-                query_vector=query_vec_list,
-                limit=top_k,
-                query_filter=query_filter,
-                with_payload=True,
-            )
+        # Dùng query_points cho qdrant-client >= 1.7
+        response = client.query_points(
+            collection_name=collection_name,
+            query=query_vec_list,
+            limit=top_k,
+            query_filter=query_filter,
+            with_payload=True,
+        )
+        hits = response.points
 
         results = []
         for hit in hits:

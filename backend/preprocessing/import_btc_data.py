@@ -464,7 +464,12 @@ def build_btc_metadata(
         info = media_info.get(video_id, {})
         fps = _as_float(info.get("fps"), 25.0)
         duration = _as_float(info.get("duration"), 0.0)
-        title = str(info.get("title") or video_id.replace("_", " "))
+        raw_title = str(info.get("title") or video_id.replace("_", " "))
+        
+        # Dịch title sang Tiếng Anh
+        from backend.embedding.clip_encoder import translate_vi_to_en
+        title = translate_vi_to_en(raw_title)
+        
         frame_map = keyframe_maps.get(video_id, {})
 
         video_path_obj = _find_video_file(video_id)

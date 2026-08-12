@@ -25,6 +25,7 @@ def transcribe_video(video_path: Path) -> List[Dict]:
     segments, _info = model.transcribe(
         str(video_path),
         language=WHISPER_LANGUAGE,
+        task="translate",
         vad_filter=True,
     )
     return [

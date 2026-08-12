@@ -268,18 +268,23 @@ def step4_query_and_generate_artifact(client, query_text: str = "a photo of a tr
 
 
 def main():
-    device = DEVICE  # GPU AMD DirectML mặc định cho cả Training + Inference
+    train_device = "cpu"  # BẮT BUỘC dùng CPU cho Training trên máy này
+    gpu_device = DEVICE
     batch_size = 32
     epochs = 3
-    limit = 0  # 0 = FULL toàn bộ 22,248 keyframes của Video_L21
+    limit = 1000  # Chỉ dùng 1000 keyframes để test thử nhanh
 
-    logger.info("=== HUẤN LUYỆN LORA CLIP FULL L21 (22,248 KEYFRAMES) trên %s ===", device)
+    logger.info("=== HUẤN LUYỆN LORA CLIP FULL L21 (1000 KEYFRAMES) ===")
 
-    # 1. Train LoRA trên GPU AMD DirectML
-    model, preprocess, _ = step1_train_lora(device=device, limit=limit, epochs=epochs, batch_size=batch_size)
+    # 1. Train LoRA trên CPU
+    model, preprocess, _ = step1_train_lora(device=train_device, limit=limit, epochs=epochs, batch_size=batch_size)
 
-    # 2. Trích xuất đặc trưng FULL 22,248 keyframe bằng GPU AMD DirectML
-    step2_extract_features(model, preprocess, device=device, limit=limit)
+    # Chuyển mô hình sang GPU trước khi trích xuất đặc trưng (vì quá trình train đang dùng CPU)
+    logger.info("Chuyển model sang %s để trích xuất ảnh...", gpu_device)
+    model = model.to(gpu_device)
+
+    # 2. Trích xuất đặc trưng bằng GPU
+    step2_extract_features(model, preprocess, device=gpu_device, limit=limit)
 
     # 3. Push Qdrant FULL 22,248 keyframe
     client = step3_push_to_qdrant(limit=limit)

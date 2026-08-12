@@ -121,3 +121,22 @@ def test_qdrant_search_with_filter():
     # 3. Đảm bảo toàn bộ kết quả trả về chỉ thuộc L22_V002
     assert len(results) == 1
     assert results[0]["video_id"] == "L22_V002"
+
+def test_vietnamese_translation():
+    """
+    Kiểm thử chức năng tự động dịch Tiếng Việt sang Tiếng Anh.
+    """
+    from backend.embedding.clip_encoder import translate_vi_to_en
+    
+    # Test Tiếng Việt
+    vi_query = "một bức ảnh về chiếc xe hơi màu đỏ"
+    en_query = translate_vi_to_en(vi_query)
+    
+    # Kết quả dịch thường sẽ chứa từ 'red car' hoặc 'photo'
+    assert "red" in en_query.lower()
+    assert "car" in en_query.lower()
+    
+    # Test Tiếng Anh (không dịch)
+    en_original = "A blue sky"
+    en_result = translate_vi_to_en(en_original)
+    assert en_result == en_original

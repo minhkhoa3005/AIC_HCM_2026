@@ -258,6 +258,9 @@ def main():
     import clip
     logger.info("Loading CLIP %s on %s...", CLIP_MODEL_NAME, device)
     model, preprocess = clip.load(CLIP_MODEL_NAME, device=device)
+    
+    # Ép kiểu FP32 để chống tràn số học (NaN) trên CUDA
+    model = model.float()
 
     # 2. Inject / Resume LoRA
     if args.resume and LORA_WEIGHTS_PATH.exists():
