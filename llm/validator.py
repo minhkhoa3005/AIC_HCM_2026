@@ -17,14 +17,15 @@ LIST_FIELDS = (
     "positive_constraints",
     "negative_constraints",
     "metadata_keywords",
+    "clip_queries",
 )
 
 
 def validate_query_plan(raw_plan: dict[str, Any]) -> QueryPlan:
     """Repair small omissions, then validate a raw LLM QueryPlan dict.
 
-    Day 1 intentionally avoids guessing invalid task types. If ``task_type`` is
-    missing or not one of the V1 enum values, this function raises ValueError.
+    Invalid or missing ``task_type`` values raise ValueError instead of being
+    guessed locally.
     """
 
     if not isinstance(raw_plan, dict):

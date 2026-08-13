@@ -33,6 +33,8 @@ class TrakeEvent(BaseModel):
 class QueryPlan(BaseModel):
     """Normalized LLM output used by downstream retrieval and reranking."""
 
+    raw_query: str = ""
+    rewritten_query: str = ""
     task_type: TaskType
     search_description: str
     question: str | None = None
@@ -44,15 +46,8 @@ class QueryPlan(BaseModel):
     positive_constraints: list[str] = Field(default_factory=list)
     negative_constraints: list[str] = Field(default_factory=list)
     metadata_keywords: list[str] = Field(default_factory=list)
+    clip_queries: list[str] = Field(default_factory=list)
     confidence: float = 0.5
-
-
-class IntentClassification(BaseModel):
-    """Task classification result before full query parsing."""
-
-    task_type: TaskType
-    confidence: float = 0.5
-    reason: str = ""
 
 
 class Candidate(BaseModel):

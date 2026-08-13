@@ -32,14 +32,10 @@ class LLMConfig:
     """Runtime knobs for API-backed LLM calls."""
 
     llm_provider: str
-    llm_api_key: str | None
+    llm_api_keys: tuple[str, ...]
     llm_model: str
-    use_llm_classifier: bool
-    llm_classifier_temperature: float
-    intent_confidence_threshold: float
-    use_llm_parser: bool
-    llm_parser_mode: str
-    llm_parser_temperature: float
+    llm_rewrite_temperature: float
+    llm_planner_temperature: float
 
 
 def get_llm_config(load_env: bool = True) -> LLMConfig:
@@ -48,14 +44,16 @@ def get_llm_config(load_env: bool = True) -> LLMConfig:
     if load_env:
         load_project_env()
 
+    api_keys = tuple(
+        key.strip()
+        for key in os.getenv("LLM_API_KEYS", "").replace("\n", ",").split(",")
+        if key.strip()
+    )
+
     return LLMConfig(
         llm_provider=os.getenv("LLM_PROVIDER", "gemini").strip().lower(),
-        llm_api_key=os.getenv("LLM_API_KEY"),
+        llm_api_keys=api_keys,
         llm_model=os.getenv("LLM_MODEL", "gemini-2.5-flash"),
-        use_llm_classifier=_read_bool("USE_LLM_CLASSIFIER", False),
-        llm_classifier_temperature=float(os.getenv("LLM_CLASSIFIER_TEMPERATURE", "0")),
-        intent_confidence_threshold=float(os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.8")),
-        use_llm_parser=_read_bool("USE_LLM_PARSER", False),
-        llm_parser_mode=os.getenv("LLM_PARSER_MODE", "auto").strip().lower(),
-        llm_parser_temperature=float(os.getenv("LLM_PARSER_TEMPERATURE", "0")),
+        llm_rewrite_temperature=float(os.getenv("LLM_REWRITE_TEMPERATURE", "0")),
+        llm_planner_temperature=float(os.getenv("LLM_PLANNER_TEMPERATURE", "0")),
     )

@@ -11,6 +11,9 @@ import re
 from typing import Any
 
 from .config import LLMConfig
+from .providers.key_pool import APIKeyPool
+
+_KEY_POOLS: dict[tuple[str, ...], APIKeyPool] = {}
 
 
 def generate_llm_json(
@@ -21,20 +24,19 @@ def generate_llm_json(
 ) -> dict[str, Any]:
     """Generate and parse a JSON object from the configured LLM provider."""
 
-    resolved_client = client or _build_llm_client(config)
-    response = _generate_content(resolved_client, prompt, config, temperature)
+    if client is not None:
+        response = _generate_content(client, prompt, config, temperature)
+    else:
+        response = _generate_content_with_key_rotation(prompt, config, temperature)
     payload = _parse_json_response(_response_text(response))
     if not isinstance(payload, dict):
         raise ValueError("LLM response must be a JSON object")
     return payload
 
 
-def _build_llm_client(config: LLMConfig) -> Any:
+def _build_llm_client_for_key(config: LLMConfig, api_key: str) -> Any:
     if config.llm_provider != "gemini":
         raise ValueError(f"Unsupported LLM_PROVIDER {config.llm_provider!r}")
-    if not config.llm_api_key:
-        raise ValueError("LLM_API_KEY is required when an LLM feature is enabled")
-
     try:
         from google import genai
     except ImportError as exc:  # pragma: no cover - depends on local install
@@ -42,7 +44,37 @@ def _build_llm_client(config: LLMConfig) -> Any:
             "google-genai is required for the configured LLM provider."
         ) from exc
 
-    return genai.Client(api_key=config.llm_api_key)
+    return genai.Client(api_key=api_key)
+
+
+def _get_key_pool(keys: tuple[str, ...]) -> APIKeyPool:
+    if keys not in _KEY_POOLS:
+        _KEY_POOLS[keys] = APIKeyPool(list(keys))
+    return _KEY_POOLS[keys]
+
+
+def _generate_content_with_key_rotation(
+    prompt: str,
+    config: LLMConfig,
+    temperature: float,
+) -> Any:
+    if not config.llm_api_keys:
+        raise ValueError("LLM_API_KEYS is required when an LLM feature is enabled")
+
+    pool = _get_key_pool(config.llm_api_keys)
+    last_error: Exception | None = None
+    for _ in range(len(config.llm_api_keys)):
+        api_key = pool.next_key()
+        try:
+            client = _build_llm_client_for_key(config, api_key)
+            response = _generate_content(client, prompt, config, temperature)
+            pool.mark_available(api_key)
+            return response
+        except Exception as exc:
+            pool.mark_failed(api_key)
+            last_error = exc
+
+    raise RuntimeError("All configured LLM API keys failed or are cooling down") from last_error
 
 
 def _generate_content(

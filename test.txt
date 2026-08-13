@@ -1,0 +1,24 @@
+@'
+from llm.config import get_llm_config
+from llm.planner import plan_query
+from llm.query_builder import build_clip_queries
+
+query = """
+"Tìm cảnh nhóm bác sĩ mặc đồ xanh đang phẫu thuật và cho biết vụ án cướp tài sản được nhắc đến trên dòng chữ chạy ngang bên dưới xảy ra ở địa phương nào?"
+"""
+
+plan = plan_query(query, config=get_llm_config())
+
+print("=== TASK TYPE ===")
+print(plan.task_type.value)
+
+print("\n=== REWRITTEN QUERY ===")
+print(plan.rewritten_query)
+
+print("\n=== QUERY PLAN ===")
+print(plan.model_dump_json(indent=2, ensure_ascii=False))
+
+print("\n=== CLIP QUERIES ===")
+for index, clip_query in enumerate(build_clip_queries(plan), start=1):
+    print(f"{index}. {clip_query}")
+'@ | .\.venv\Scripts\python.exe -X utf8 -

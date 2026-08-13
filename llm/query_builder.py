@@ -3,27 +3,18 @@
 from __future__ import annotations
 
 from .schemas import QueryPlan
-from .task_types import TaskType
 
 
 def build_clip_queries(plan: QueryPlan) -> list[str]:
-    """Convert a ``QueryPlan`` into text queries for ``search_clip_text``.
+    """Return LLM-generated English CLIP queries for ``search_clip_text``."""
 
-    Retrieval accepts ``list[str]`` because one user query may become several
-    CLIP searches, especially TRAKE where each event should be searched
-    independently.
-    """
-
-    queries: list[str] = []
-
-    if plan.task_type == TaskType.TRAKE and plan.events:
-        queries.extend(event.description for event in plan.events)
-    else:
-        queries.append(plan.search_description)
-
-    queries.extend(plan.positive_constraints)
-    queries.extend(plan.metadata_keywords)
-    return _dedupe_non_empty(queries)
+    queries = _dedupe_non_empty(plan.clip_queries)
+    if not queries:
+        raise ValueError("QueryPlan.clip_queries must contain English CLIP queries")
+    invalid = [query for query in queries if not _is_ascii(query)]
+    if invalid:
+        raise ValueError(f"clip_queries must be English-only ASCII strings: {invalid!r}")
+    return queries
 
 
 def build_rerank_text(plan: QueryPlan) -> str:
@@ -49,3 +40,11 @@ def _dedupe_non_empty(values: list[str]) -> list[str]:
             seen.add(cleaned)
             result.append(cleaned)
     return result
+
+
+def _is_ascii(value: str) -> bool:
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError:
+        return False
+    return True
