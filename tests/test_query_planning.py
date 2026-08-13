@@ -111,8 +111,11 @@ def test_plan_query_rewrites_then_builds_complete_plan():
     planner_prompt = planner_client.calls[0]["contents"]
     assert "tiếng Việt có dấu" in planner_prompt
     assert "người đàn ông" in planner_prompt
-    assert "Ví dụ few-shot bắt buộc tham chiếu" in planner_prompt
-    assert "a close-up of a woman holding a white paper bag with her hands visible" in planner_prompt
+    assert "PHẦN A — VÍ DỤ THAM CHIẾU VỀ CÁCH TẠO QUERYPLAN" in planner_prompt
+    assert "QUY TẮC VISUAL_HINTS" in planner_prompt
+    assert "Không ép mọi query mở" in planner_prompt
+    assert "a video frame showing" in planner_prompt
+    assert "a close-up of a green signboard with readable text" in planner_prompt
     assert "clearly showing which hand is used" not in planner_prompt
 
 

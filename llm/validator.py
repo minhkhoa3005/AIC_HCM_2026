@@ -44,6 +44,9 @@ def validate_query_plan(raw_plan: dict[str, Any]) -> QueryPlan:
         if plan.get(field_name) is None:
             plan[field_name] = []
 
+    if plan.get("visual_hints") is None:
+        plan["visual_hints"] = {}
+
     if plan.get("confidence") is None:
         plan["confidence"] = 0.5
     else:

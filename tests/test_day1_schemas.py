@@ -2,7 +2,15 @@ import json
 
 import pytest
 
-from llm.schemas import Candidate, Entity, EntityAction, QueryPlan, TrakeEvent
+from llm.schemas import (
+    Candidate,
+    CaptureContext,
+    Entity,
+    EntityAction,
+    QueryPlan,
+    TrakeEvent,
+    VisualHints,
+)
 from llm.task_types import TaskType
 from llm.validator import validate_query_plan
 from retrieval.mock_retrieval import mock_search_clip_text
@@ -93,6 +101,36 @@ def test_query_plan_json_round_trip():
     assert recreated.confidence == 0.86
 
 
+def test_visual_hints_keep_optional_capture_context_and_visual_slots():
+    plan = QueryPlan(
+        task_type=TaskType.TEXTUAL_KIS,
+        search_description="nguoi mo cua xe",
+        visual_hints=VisualHints(
+            capture_context=CaptureContext(
+                source="surveillance",
+                camera_style="CCTV security footage",
+                viewpoint="fixed elevated wide-angle",
+                camera_motion="static",
+                certainty="explicit",
+            ),
+            core_subjects=["nguoi", "xe"],
+            hypernyms={"xe": ["phuong tien giao thong"]},
+            states=["cua xe dang mo"],
+            environment=["ngoai troi"],
+        ),
+    )
+
+    payload = json.loads(plan.model_dump_json())
+    recreated = QueryPlan(**payload)
+
+    assert recreated.visual_hints.medium == "video frame"
+    assert recreated.visual_hints.capture_context.source == "surveillance"
+    assert recreated.visual_hints.core_subjects == ["nguoi", "xe"]
+    assert recreated.visual_hints.hypernyms["xe"] == ["phuong tien giao thong"]
+    assert recreated.visual_hints.states == ["cua xe dang mo"]
+    assert recreated.visual_hints.environment == ["ngoai troi"]
+
+
 def test_validator_repairs_missing_lists_and_confidence():
     plan = validate_query_plan(
         {
@@ -105,6 +143,8 @@ def test_validator_repairs_missing_lists_and_confidence():
     assert plan.task_type == TaskType.QA
     assert plan.events == []
     assert plan.entities == []
+    assert plan.visual_hints.medium == "video frame"
+    assert plan.visual_hints.capture_context is None
     assert plan.confidence == 0.5
 
 

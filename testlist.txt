@@ -1,0 +1,124 @@
+TEST LIST — QUERY TỪ KHÓ ĐẾN DỄ
+
+Ảnh tham chiếu: 16f0e28b-7011-4397-9dc8-55c1ac656cc8.jpg
+
+TEST 1 — QA nhiều thuộc tính, OCR và vị trí
+Expected task_type: QA
+
+Trong video phát sóng truyền hình, hãy tìm khung hình có logo HTV9 HD và thời gian 06:39:42 ở góc trên bên phải. Trong khung hình có bốn người phụ nữ đứng cạnh nhau từ trái sang phải và đều cầm giấy. Hãy cho biết người thứ hai từ trái mặc áo màu gì, người thứ ba có mặc áo khoác hay không, người ngoài cùng bên phải có cầm giấy bằng cả hai tay không, logo kênh và thời gian hiển thị là gì, đồng thời tổng cộng có bao nhiêu người phụ nữ đang cầm giấy. Nếu chữ trên giấy không đủ rõ thì trả lời UNKNOWN, không suy đoán.
+
+
+TEST 2 — QA nhiều bước, tập trung metadata
+Expected task_type: QA
+
+Hãy tìm cảnh bốn người phụ nữ đứng thành hàng trong một chương trình truyền hình. Kiểm tra logo ở góc trên bên phải để xác định tên kênh và đọc thời gian hiển thị bên dưới logo. Sau đó xác định người phụ nữ đứng ngoài cùng bên phải có đang cầm một tờ giấy hay không.
+
+
+TEST 3 — QA về quan hệ trái phải
+Expected task_type: QA
+
+Trong khung hình có bốn người phụ nữ đứng từ trái sang phải. Người thứ hai từ trái mặc áo màu gì, người thứ tư mặc áo màu gì, và người thứ ba có đứng giữa hai người đó không?
+
+
+TEST 4 — QA về đếm và trạng thái
+Expected task_type: QA
+
+Hãy tìm khung hình có nhiều người phụ nữ đang cầm các tờ giấy trước ngực. Có bao nhiêu người phụ nữ nhìn thấy rõ trong khung hình và có bao nhiêu người đang cầm giấy?
+
+
+TEST 5 — QA về thuộc tính hình ảnh
+Expected task_type: QA
+
+Người phụ nữ đứng ngoài cùng bên trái mặc áo khoác màu gì? Người phụ nữ đứng ngoài cùng bên phải mặc áo vest màu gì?
+
+
+TEST 6 — QA về capture context
+Expected task_type: QA
+
+Trong một chương trình truyền hình được phát trên HTV9, hãy tìm khung hình có bốn người phụ nữ đứng cạnh nhau và cầm giấy. Hãy cho biết đây có phải là cảnh quay từ camera truyền hình hay camera giám sát không, dựa trên logo kênh và bố cục khung hình.
+
+
+TEST 7 — TEXTUAL_KIS có nhiều đối tượng
+Expected task_type: TEXTUAL_KIS
+
+Tìm cảnh bốn người phụ nữ đứng cạnh nhau trong một chương trình truyền hình, mỗi người cầm một tờ giấy trước người.
+
+
+TEST 8 — TEXTUAL_KIS trung bình
+Expected task_type: TEXTUAL_KIS
+
+Tìm khung hình có bốn người phụ nữ đứng thành hàng và cầm giấy.
+
+
+TEST 9 — TEXTUAL_KIS đơn giản
+Expected task_type: TEXTUAL_KIS
+
+Tìm cảnh những người phụ nữ đang cầm giấy.
+
+
+TEST 10 — Đơn giản nhất
+Expected task_type: TEXTUAL_KIS
+
+Tìm những người phụ nữ trong video.
+
+
+TRAKE TEST LIST — CHUỖI SỰ KIỆN TỪ KHÓ ĐẾN DỄ
+
+TEST 11 — TRAKE khó, CCTV, nhiều hành động nhỏ liên tiếp
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện theo đúng thứ tự trong camera giám sát cố định góc rộng: một người đàn ông mặc áo đen đi vào bãi xe, nhìn quanh khu vực, cúi xuống cạnh một xe máy màu trắng, dùng tay tác động vào ổ khóa, sau đó dắt chiếc xe máy ra khỏi cổng.
+
+
+TEST 12 — TRAKE khó, góc nhìn người đeo camera / sousveillance
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện theo đúng thứ tự từ góc nhìn camera gắn trên người đi xe đạp: người quay tiến đến ngã tư, dừng lại trước vạch khi đèn đỏ, một ô tô màu bạc cắt ngang phía trước, người quay hướng camera về biển số xe, rồi tiếp tục đi theo chiếc ô tô vào một con đường nhỏ.
+
+
+TEST 13 — TRAKE khó, phát sóng truyền hình, có metadata và đối tượng liên quan
+Expected task_type: TRAKE
+
+Trong một bản tin truyền hình có logo kênh ở góc màn hình, tìm chuỗi sự kiện theo thứ tự: xe cảnh sát dừng trước một tòa nhà, nhiều người bị dẫn xuống khỏi xe, họ đứng thành hàng trước nền tường tối, một số người cầm giấy trước ngực, sau đó máy quay chuyển sang bàn có tang vật và giấy tờ.
+
+
+TEST 14 — TRAKE khó, phân biệt thứ tự tương tác người-vật
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện trong nhà bếp: một đầu bếp rửa rau dưới vòi nước, đặt rau lên thớt, dùng dao thái cà rốt, cho nguyên liệu vào chảo đang nóng, đảo thức ăn bằng xẻng, rồi bày món ăn ra đĩa trắng.
+
+
+TEST 15 — TRAKE trung bình, hành vi trong cửa hàng
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện trong cửa hàng tiện lợi: một người mặc áo khoác xám bước vào lối hàng, lấy một hộp sản phẩm trên kệ, nhìn về phía quầy thu ngân, bỏ hộp sản phẩm vào ba lô, rồi đi nhanh ra cửa.
+
+
+TEST 16 — TRAKE trung bình, giao thông và cứu hộ
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện trên đường phố: một xe tải chạy qua giao lộ, một xe máy phía sau bị ngã xuống đường, vài người đi bộ chạy lại gần, một người dựng xe máy lên, sau đó xe cứu thương hoặc xe có đèn ưu tiên xuất hiện ở gần hiện trường.
+
+
+TEST 17 — TRAKE trung bình, lớp học
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện trong lớp học: giáo viên viết lên bảng, một học sinh giơ tay, giáo viên quay lại chỉ vào học sinh đó, học sinh bước lên bảng, rồi học sinh viết hoặc vẽ thêm nội dung trên bảng.
+
+
+TEST 18 — TRAKE dễ, thể thao
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện trên sân bóng: cầu thủ áo đỏ nhận bóng, rê bóng qua một cầu thủ áo xanh, sút bóng về phía khung thành, thủ môn lao người cản phá, rồi bóng bật ra trước khung thành.
+
+
+TEST 19 — TRAKE dễ, hành động hằng ngày
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện: một người đàn ông mở ô dưới trời mưa, đi qua vạch sang đường, đến trước cửa một tòa nhà, gập ô lại, rồi bước vào bên trong.
+
+
+TEST 20 — TRAKE đơn giản nhất
+Expected task_type: TRAKE
+
+Tìm chuỗi sự kiện: một người phụ nữ nhặt điện thoại trên bàn, nhìn vào màn hình, bấm vài lần bằng ngón tay, rồi bỏ điện thoại vào túi xách.

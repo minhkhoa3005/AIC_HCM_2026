@@ -4,7 +4,7 @@ from llm.planner import plan_query
 from llm.query_builder import build_clip_queries
 
 query = """
-"Tìm cảnh nhóm bác sĩ mặc đồ xanh đang phẫu thuật và cho biết vụ án cướp tài sản được nhắc đến trên dòng chữ chạy ngang bên dưới xảy ra ở địa phương nào?"
+"Tìm khung hình có bốn người phụ nữ đứng thành hàng và cầm giấy."
 """
 
 plan = plan_query(query, config=get_llm_config())
