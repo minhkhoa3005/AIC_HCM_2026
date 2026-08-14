@@ -1,7 +1,7 @@
 """CLIP encoders shared by indexing, search, training, and evaluation."""
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 import cv2
 import numpy as np
@@ -189,23 +189,59 @@ def encode_texts(texts: list[str], batch_size: int = 64) -> list[np.ndarray]:
     return results
 
 
-def encode_text_raw(text: str, translate: bool = True) -> np.ndarray:
+# ---------------------------------------------------------------------------
+# Prompt Templates cho Text Prompts & Ensembling
+# Được tối ưu cho dữ liệu video tin tức AIC 2026
+# ---------------------------------------------------------------------------
+PROMPT_TEMPLATES: List[str] = [
+    "a photo of {}.",
+    "a video frame showing {}.",
+    "a screenshot of {}.",
+    "a news clip of {}.",
+    "a close-up of {}.",
+    "a scene depicting {}.",
+    "{}.",  # raw query (không thêm template)
+]
+
+
+def encode_text_raw(
+    text: str,
+    translate: bool = True,
+    use_ensemble: bool = True,
+) -> np.ndarray:
     """Encode text qua CLIP ONLY, KHÔNG áp dụng Projection Head.
 
-    Dùng cho training data preparation hoặc search raw.
+    Khi use_ensemble=True (mặc định), áp dụng Text Prompts & Ensembling:
+    tạo nhiều biến thể prompt từ câu query, encode tất cả rồi lấy trung bình
+    vector để tăng độ chính xác tìm kiếm.
+
+    Khi use_ensemble=False, encode đơn lẻ (dùng cho training data preparation).
     """
     import clip
 
     model, _ = _load_clip()
-    
+
     if translate:
         text = translate_vi_to_en(text)
-        
+
     text = text.strip() or "empty video segment"
-    tok = clip.tokenize([text], truncate=True).to(DEVICE)
-    with torch.no_grad():
-        emb = model.encode_text(tok).float()
-    return _normalize(emb.cpu().numpy())[0]
+
+    if use_ensemble and len(PROMPT_TEMPLATES) > 1:
+        # Tạo tất cả biến thể prompt
+        prompts = [tmpl.format(text) for tmpl in PROMPT_TEMPLATES]
+        tok = clip.tokenize(prompts, truncate=True).to(DEVICE)
+        with torch.no_grad():
+            emb = model.encode_text(tok).float()  # (N_templates, 512)
+            # Chuẩn hóa từng vector trước khi lấy trung bình
+            emb = emb / emb.norm(dim=-1, keepdim=True)
+            # Lấy trung bình rồi chuẩn hóa lại
+            mean_emb = emb.mean(dim=0, keepdim=True)
+        return _normalize(mean_emb.cpu().numpy())[0]
+    else:
+        tok = clip.tokenize([text], truncate=True).to(DEVICE)
+        with torch.no_grad():
+            emb = model.encode_text(tok).float()
+        return _normalize(emb.cpu().numpy())[0]
 
 
 def encode_texts_raw(texts: list[str], batch_size: int = 64) -> list[np.ndarray]:

@@ -1,119 +1,50 @@
-"""pipeline_batch_run.py
+"""Pipeline Batch Run - Ensemble 3 Models (Zero-shot) + FAISS Local
 
-Chạy toàn bộ pipeline tự động:
-1. Huấn luyện LoRA CLIP trên batch L21 (1,000 keyframes) dùng GPU (nếu có).
-2. Trích xuất lại vector đặc trưng 512d với LoRA-CLIP.
-3. Đẩy vector và metadata lên Qdrant Vector Database.
-4. Truy vấn kết quả tìm kiếm với query = 'a photo of a tree', lưu ảnh keyframe kết quả và xuất báo cáo Markdown.
+Kiến trúc:
+1. Trích xuất đặc trưng (Feature Extraction): CLIP ViT-L/14 + BLIP-2 Vision + BEiT3-base.
+2. Không sử dụng LoRA (Zero-shot hoàn toàn).
+3. Hợp nhất 3 vector thành vector 2304 chiều.
+4. Xây dựng chỉ mục FAISS Local và lưu xuống đĩa.
+5. Truy vấn bằng vector CLIP x3 (Phương án tạm thời để khớp chiều dữ liệu).
 """
+
 import json
 import logging
 import os
-import sys
 from pathlib import Path
-
 import numpy as np
 import torch
 from PIL import Image
 
-ROOT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT_DIR))
+# Import models
+import open_clip
+from transformers import BlipVisionModel, BlipProcessor, BeitModel, BeitImageProcessor
+import faiss
+from deep_translator import GoogleTranslator
 
 from backend.config import (
-    BTC_CLIP_FEATURES_DIR,
-    CLIP_MODEL_NAME,
-    DEVICE,
-    KEYFRAMES_DIR,
-    LORA_ALPHA,
-    LORA_RANK,
-    LORA_WEIGHTS_PATH,
     METADATA_PATH,
-    QDRANT_COLLECTION_NAME,
-    QDRANT_HOST,
-    QDRANT_PORT,
-    USE_REMOTE_VECTOR_DB,
-)
-from backend.embedding.clip_encoder import encode_image, encode_text_raw
-from backend.training.lora import (
-    count_trainable_params,
-    inject_lora,
-    load_lora_weights,
-    save_lora_weights,
-)
-from scripts.train_lora_clip import (
-    KeyframeCaptionDataset,
-    _load_training_data,
-    compute_clip_loss,
-    train_one_epoch,
-    validate,
+    BTC_CLIP_FEATURES_DIR,
+    FAISS_INDEX_PATH,
+    FAISS_METADATA_PATH,
+    DEVICE
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
-def step1_train_lora(device=None, limit: int = 1000, epochs: int = 3, batch_size: int = 32):
-    """Bước 1: Huấn luyện LoRA CLIP (hỗ trợ NVIDIA CUDA & AMD DirectML GPU)."""
-    if device is None:
-        device = DEVICE
-    logger.info("=== BƯỚC 1: HUẤN LUYỆN LORA CLIP TRÊN GPU/CPU ===")
-    import clip
-
-    dev_str = str(device)
-    is_gpu = dev_str.startswith("cuda") or "privateuseone" in dev_str
-    logger.info("Nạp CLIP %s trên thiết bị: %s (GPU Active: %s)", CLIP_MODEL_NAME, device, is_gpu)
-
-    model, preprocess = clip.load(CLIP_MODEL_NAME, device=device)
-
-    n_injected = inject_lora(model, rank=LORA_RANK, alpha=LORA_ALPHA)
-    if LORA_WEIGHTS_PATH.exists():
-        logger.info("Kế thừa tiến độ: Nạp checkpoint LoRA đã train từ trước từ %s", LORA_WEIGHTS_PATH)
-        load_lora_weights(model, LORA_WEIGHTS_PATH)
-
-    trainable, total = count_trainable_params(model)
-    logger.info(
-        "LoRA injected into %d layers. Trainable: %s / %s (%.2f%%)",
-        n_injected, f"{trainable:,}", f"{total:,}", 100 * trainable / total,
-    )
-
-    items = _load_training_data(METADATA_PATH, limit=limit)
-    if not items:
-        logger.error("Không tìm thấy metadata!")
-        return model, preprocess, device
-
-    from torch.utils.data import DataLoader
-    dataset = KeyframeCaptionDataset(items, preprocess, clip.tokenize)
-    loader = DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=0,
-        pin_memory=False,
-        drop_last=True,
-    )
-
-    optimizer = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad],
-        lr=1e-4,
-        weight_decay=0.01,
-    )
-
-    for epoch in range(1, epochs + 1):
-        loss = train_one_epoch(model, loader, optimizer, device, epoch, epochs)
-        logger.info("Epoch %d/%d | Loss: %.4f", epoch, epochs, loss)
-
-    save_lora_weights(
-        model,
-        LORA_WEIGHTS_PATH,
-        metadata={"epochs": epochs, "limit": limit, "device": device},
-    )
-    logger.info("Hoàn tất lưu LoRA weights: %s", LORA_WEIGHTS_PATH)
-    return model, preprocess, device
+# Thông số mô hình
+DIM_CLIP = 768
+DIM_BLIP = 768 # Sử dụng BLIP Base (768 chiều) thay vì BLIP-2
+DIM_BEIT = 768
+# Tổng chiều sẽ là 768 + 768 + 768 = 2304.
 
 
-def step2_extract_features(model, preprocess, device: str, limit: int = 1000):
-    """Bước 2: Trích xuất vector đặc trưng bằng LoRA-CLIP."""
-    logger.info("=== BƯỚC 2: TRÍCH XUẤT VECTOR BẰNG LORA-CLIP ===")
+def step1_extract_features(limit: int = 1000):
+    """Bước 1: Trích xuất tuần tự 3 model để tránh OOM."""
+    logger.info("=== BƯỚC 1: TRÍCH XUẤT ĐẶC TRƯNG ENSEMBLE (3 MODELS) ===")
+    
+    # 1. Đọc danh sách ảnh
     items = []
     with open(METADATA_PATH, encoding="utf-8") as f:
         for i, line in enumerate(f):
@@ -121,65 +52,101 @@ def step2_extract_features(model, preprocess, device: str, limit: int = 1000):
                 break
             if line.strip():
                 items.append(json.loads(line))
+                
+    if not items:
+        logger.warning("Không có ảnh nào để xử lý.")
+        return
 
-    model.eval()
-    extracted_count = 0
+    # Khởi tạo thư mục lưu
+    out_dir = BTC_CLIP_FEATURES_DIR / "ensemble_features"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Dictionary lưu trữ các vector tạm thời
+    # Structure: { video_id_frame_id: [vec_clip, vec_blip, vec_beit] }
+    all_features = {}
+    for item in items:
+        key = f"{item['video_id']}_{item.get('frame_id', 0)}"
+        all_features[key] = []
+        
+    device = DEVICE
+
+    # Khởi tạo đồng thời 3 mô hình
+    logger.info("-> Nạp đồng thời 3 mô hình (CLIP, BLIP Base, BEiT v1) vào VRAM...")
+    
+    # 1. CLIP
+    model_clip, _, preprocess_clip = open_clip.create_model_and_transforms('ViT-L-14', pretrained='laion2b_s32b_b82k', device=device)
+    model_clip.eval()
+    
+    # 2. BLIP
+    processor_blip = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    model_blip = BlipVisionModel.from_pretrained("Salesforce/blip-image-captioning-base", torch_dtype=torch.float16).to(device)
+    model_blip.eval()
+    
+    # 3. BEiT
+    processor_beit = BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+    model_beit = BeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k").to(device)
+    model_beit.eval()
+
+    logger.info("-> Bắt đầu trích xuất song song qua 1 vòng lặp...")
     with torch.no_grad():
         for item in items:
+            key = f"{item['video_id']}_{item.get('frame_id', 0)}"
             img_path = Path(item["path"])
-            if not img_path.exists():
-                continue
-
+            
+            # Auto-save feature, nếu có rồi thì skip
+            feat_path = out_dir / f"{key}.npy"
+            if feat_path.exists(): continue
+                
+            if not img_path.exists(): continue
+            
             try:
                 img = Image.open(img_path).convert("RGB")
-                img_t = preprocess(img).unsqueeze(0).to(device)
-                feat = model.encode_image(img_t)
-                feat = (feat / feat.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0)
-
-                video_id = item["video_id"]
-                frame_stem = img_path.stem
-                batch_name = video_id.split("_")[0]
-
-                out_dir = BTC_CLIP_FEATURES_DIR / batch_name / video_id
-                out_dir.mkdir(parents=True, exist_ok=True)
-                np.save(out_dir / f"{frame_stem}.npy", feat)
-                extracted_count += 1
+                
+                # 1. CLIP Extract
+                img_clip = preprocess_clip(img).unsqueeze(0).to(device)
+                feat_clip = model_clip.encode_image(img_clip)
+                feat_clip = (feat_clip / feat_clip.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0)
+                
+                # 2. BLIP Extract
+                inputs_blip = processor_blip(images=img, return_tensors="pt").to(device, torch.float16)
+                outputs_blip = model_blip(**inputs_blip)
+                feat_blip = outputs_blip.pooler_output.cpu().numpy().squeeze(0)
+                feat_blip = feat_blip / np.linalg.norm(feat_blip)
+                
+                # 3. BEiT Extract
+                inputs_beit = processor_beit(images=img, return_tensors="pt").to(device)
+                outputs_beit = model_beit(**inputs_beit)
+                feat_beit = outputs_beit.pooler_output.cpu().numpy().squeeze(0)
+                feat_beit = feat_beit / np.linalg.norm(feat_beit)
+                
+                # Nối vector
+                super_vec = np.concatenate([feat_clip, feat_blip, feat_beit]).astype(np.float32)
+                np.save(feat_path, super_vec) # Auto-save ngay lập tức
+                
             except Exception as e:
-                logger.warning("Lỗi trích xuất %s: %s", img_path, e)
+                logger.warning("Lỗi xử lý ảnh %s: %s", img_path, e)
 
-    logger.info("Đã trích xuất %d vectors đặc trưng mới.", extracted_count)
+    # Giải phóng VRAM một lần duy nhất
+    del model_clip, preprocess_clip, model_blip, processor_blip, model_beit, processor_beit
+    torch.cuda.empty_cache()
+    logger.info("Đã trích xuất song song thành công. Đã giải phóng VRAM.")
+
+    # ==========================================
+    # HỢP NHẤT (CONCATENATE) & LƯU
+    # ==========================================
+    # Đếm số lượng vector đã lưu
+    saved_count = len(list(out_dir.glob("*.npy")))
+    logger.info("Đã tìm thấy hoặc trích xuất thành công %d vector.", saved_count)
 
 
-def step3_push_to_qdrant(limit: int = 1000):
-    """Bước 3: Đẩy vectors và metadata lên Qdrant Database."""
-    logger.info("=== BƯỚC 3: ĐẨY VECTORS LÊN QDRANT DATABASE ===")
-    from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
-    from backend.config import INDEX_DIR, QDRANT_URL, QDRANT_API_KEY
-
-    try:
-        if QDRANT_URL:
-            client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-        else:
-            client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, timeout=3.0)
-            client.get_collections()
-        logger.info("Kết nối tới Qdrant Server thành công.")
-    except Exception as e:
-        qdrant_db_path = str(INDEX_DIR / "qdrant_db")
-        logger.warning("Không thể kết nối Qdrant Daemon (%s). Chuyển sang Qdrant Local Storage tại '%s'...", e, qdrant_db_path)
-        client = QdrantClient(path=qdrant_db_path)
-
-    # Recreate collection
-    try:
-        if client.collection_exists(collection_name=QDRANT_COLLECTION_NAME):
-            client.delete_collection(collection_name=QDRANT_COLLECTION_NAME)
-        client.create_collection(
-            collection_name=QDRANT_COLLECTION_NAME,
-            vectors_config=VectorParams(size=512, distance=Distance.COSINE),
-        )
-        logger.info("Tạo mới Qdrant collection: %s", QDRANT_COLLECTION_NAME)
-    except Exception as e:
-        logger.warning("Thử tạo collection: %s", e)
+def step2_build_faiss_index(limit: int = 1000):
+    """Bước 2: Nạp các super vector vào FAISS Local Index."""
+    logger.info("=== BƯỚC 2: XÂY DỰNG CHỈ MỤC FAISS LOCAL ===")
+    
+    out_dir = BTC_CLIP_FEATURES_DIR / "ensemble_features"
+    if not out_dir.exists():
+        logger.error("Chưa có features, vui lòng chạy bước 1 trước.")
+        return None, None
 
     items = []
     with open(METADATA_PATH, encoding="utf-8") as f:
@@ -189,108 +156,156 @@ def step3_push_to_qdrant(limit: int = 1000):
             if line.strip():
                 items.append(json.loads(line))
 
-    points = []
+    vectors = []
+    metadata = []
+    dim = 0
+    
     for idx, item in enumerate(items):
-        video_id = item["video_id"]
-        frame_stem = Path(item["path"]).stem
-        batch_name = video_id.split("_")[0]
-        feat_path = BTC_CLIP_FEATURES_DIR / batch_name / video_id / f"{frame_stem}.npy"
-
+        key = f"{item['video_id']}_{item.get('frame_id', 0)}"
+        feat_path = out_dir / f"{key}.npy"
+        
         if feat_path.exists():
-            vec = np.load(feat_path).tolist()
+            vec = np.load(feat_path)
+            if dim == 0:
+                dim = vec.shape[0]
+                logger.info("Phát hiện số chiều của Vector: %d", dim)
+                
+            vectors.append(vec)
             payload = {
-                "video_id": video_id,
+                "id": idx,
+                "video_id": item["video_id"],
                 "frame_id": item.get("frame_id", 0),
                 "pts_time": item.get("pts_time", 0.0),
-                "path": item.get("path", ""),
-                "caption": item.get("caption", ""),
-                "text": item.get("text", ""),
+                "path": item.get("path", "")
             }
-            points.append(PointStruct(id=idx + 1, vector=vec, payload=payload))
+            metadata.append(payload)
 
-    if points:
-        client.upsert(collection_name=QDRANT_COLLECTION_NAME, points=points)
-        logger.info("Đã đẩy %d vectors lên Qdrant thành công!", len(points))
-    return client
+    if not vectors:
+        logger.warning("Không tìm thấy vector nào để đưa vào FAISS.")
+        return None, None
+
+    # Khởi tạo và nạp dữ liệu vào FAISS
+    vectors_np = np.vstack(vectors).astype(np.float32)
+    
+    # Chuẩn hóa vector trước khi tìm kiếm Cosine
+    faiss.normalize_L2(vectors_np)
+    
+    index = faiss.IndexFlatIP(dim)
+    index.add(vectors_np)
+    
+    # Lưu xuống đĩa
+    faiss.write_index(index, str(FAISS_INDEX_PATH))
+    with open(FAISS_METADATA_PATH, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
+        
+    logger.info("Đã xây dựng xong FAISS Index (%d chiều) với %d keyframes.", dim, len(metadata))
+    logger.info("- File Index: %s", FAISS_INDEX_PATH)
+    logger.info("- File Meta: %s", FAISS_METADATA_PATH)
+    return index, metadata
 
 
-def step4_query_and_generate_artifact(client, query_text: str = "a photo of a tree"):
-    """Bước 4: Truy vấn tìm kiếm, trích xuất ảnh và tạo báo cáo Markdown."""
-    logger.info("=== BƯỚC 4: TRUY VẤN TÌM KIẾM & XUẤT BÁO CÁO ===")
-    query_vec = encode_text_raw(query_text)
-
+def step3_query(index, metadata, query_text: str = "một bức ảnh về cái cây"):
+    """Bước 3: Truy vấn với văn bản (sử dụng workaround nhân bản)."""
+    logger.info("=== BƯỚC 3: TRUY VẤN TÌM KIẾM BẰNG VĂN BẢN ===")
+    if index is None: return
+    
+    # [DỊCH THUẬT] Vi -> En
+    logger.info(f"Câu truy vấn gốc (Tiếng Việt): {query_text}")
     try:
-        res = client.query_points(
-            collection_name=QDRANT_COLLECTION_NAME,
-            query=query_vec.tolist(),
-            limit=5,
-        )
-        search_results = res.points
+        query_en = GoogleTranslator(source='vi', target='en').translate(query_text)
+        logger.info(f"Bản dịch sang tiếng Anh (Đưa vào Model): {query_en}")
     except Exception as e:
-        logger.warning("Truy vấn với query_points thất bại (%s), thử lại với API tương thích...", e)
-        search_results = client.scroll(collection_name=QDRANT_COLLECTION_NAME, limit=5)[0]
-
+        logger.warning(f"Lỗi dịch thuật, dùng trực tiếp bản gốc: {e}")
+        query_en = query_text
+    
+    # Tải lại CLIP để sinh vector chữ
+    logger.info("-> Chạy Text Encoder (CLIP)...")
+    model_clip, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='laion2b_s32b_b82k', device=DEVICE)
+    tokenizer = open_clip.get_tokenizer('ViT-L-14')
+    
+    text_tokens = tokenizer([query_en]).to(DEVICE)
+    with torch.no_grad():
+        text_feat = model_clip.encode_text(text_tokens)
+        text_feat = (text_feat / text_feat.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0) # [768]
+        
+    # [WORKAROUND]: Vì ta nối CLIP(768) + BLIP(1408) + BEiT(768) = 2944 chiều
+    # Để query khớp với vector ảnh, ta cần nội suy/độn thêm vector Text cho đủ 2944.
+    # Chiến thuật tạm: Độn các số 0 vào vị trí của BLIP và BEiT. Bằng cách này, FAISS
+    # sẽ chỉ chấm điểm (Cosine) dựa trên phần 768 chiều đầu tiên (CLIP), giữ nguyên sức mạnh Text của CLIP.
+    target_dim = index.d
+    if target_dim > text_feat.shape[0]:
+        padding = np.zeros(target_dim - text_feat.shape[0], dtype=np.float32)
+        query_super = np.concatenate([text_feat, padding]).astype(np.float32)
+    else:
+        query_super = text_feat.astype(np.float32)
+        
+    # Query FAISS
+    query_super = query_super.reshape(1, -1)
+    faiss.normalize_L2(query_super)
+    
+    top_k = 5
+    scores, indices = index.search(query_super, top_k)
+    
     artifact_dir = Path("C:/Users/Administrator/.gemini/antigravity-ide/brain/c606a4f6-beb2-4fa0-a0f2-46a8ba7ee5b1")
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    md_content = f"# Kết quả Tìm Kiếm sau khi Fine-tune LoRA CLIP\n\n"
-    md_content += f"- **Query Text**: `{query_text}`\n"
-    md_content += f"- **Vector Dim**: 512d\n"
-    md_content += f"- **Model**: CLIP ViT-B/32 (LoRA-adapted)\n\n"
-    md_content += f"| Rank | Score | Video ID | Frame ID | Timestamp | Ảnh Khoảnh Khắc |\n"
+    md_content = f"# Kết quả Tìm Kiếm bằng Ensemble + FAISS\n\n"
+    md_content += f"- **Câu truy vấn (Vi)**: `{query_text}`\n"
+    md_content += f"- **Bản dịch (En)**: `{query_en}`\n"
+    md_content += f"- **Tổng số chiều vector**: `{target_dim}d`\n\n"
+    md_content += f"| Top | Score | Tựa đề Video (Dịch Vi) | Frame ID | Thời gian | Hình ảnh |\n"
     md_content += f"| :---: | :---: | :---: | :---: | :---: | :---: |\n"
 
-    for rank, hit in enumerate(search_results, 1):
-        p = hit.payload
+    for i in range(top_k):
+        idx = indices[0][i]
+        score = scores[0][i]
+        
+        if idx < 0 or idx >= len(metadata): continue
+        p = metadata[idx]
+        
         vid = p.get("video_id", "N/A")
+        title_en = p.get("video_title", "Chưa rõ")
+        try:
+            title_vi = GoogleTranslator(source='en', target='vi').translate(title_en)
+        except:
+            title_vi = title_en
+
         fid = p.get("frame_id", 0)
         pts = p.get("pts_time", 0.0)
         img_src_path = Path(p.get("path", ""))
 
-        img_artifact_name = f"{vid}_{fid}.jpg"
+        img_artifact_name = f"search_{vid}_{fid}.jpg"
         img_artifact_path = artifact_dir / img_artifact_name
 
         if img_src_path.exists():
             try:
                 img = Image.open(img_src_path)
                 img.save(img_artifact_path)
-            except Exception as e:
-                logger.warning("Không thể lưu ảnh artifact: %s", e)
+            except Exception:
+                pass
 
-        md_content += f"| **#{rank:02d}** | `{hit.score:.4f}` | `{vid}` | `{fid}` | `{pts:.1f}s` | ![{vid}_{fid}]({img_artifact_path.as_uri()}) |\n"
+        md_content += f"| **#{i+1:02d}** | `{score:.4f}` | `{title_vi} ({vid})` | `{fid}` | `{pts:.1f}s` | ![{vid}_{fid}]({img_artifact_path.as_uri()}) |\n"
 
     md_file = artifact_dir / "search_results.md"
     with open(md_file, "w", encoding="utf-8") as f:
         f.write(md_content)
 
-    logger.info("Đã lưu kết quả truy vấn và ảnh báo cáo tại: %s", md_file)
-    print("\n" + md_content)
+    logger.info("Đã lưu kết quả truy vấn tại: %s", md_file)
 
 
 def main():
-    train_device = "cpu"  # BẮT BUỘC dùng CPU cho Training trên máy này
-    gpu_device = DEVICE
-    batch_size = 32
-    epochs = 3
-    limit = 1000  # Chỉ dùng 1000 keyframes để test thử nhanh
+    limit = 0  # Đặt bằng 0 để chạy toàn bộ dataset
+    
+    logger.info("=== HỆ THỐNG SEARCH AIC 2026 (ENSEMBLE ZERO-SHOT) ===")
 
-    logger.info("=== HUẤN LUYỆN LORA CLIP FULL L21 (1000 KEYFRAMES) ===")
+    # 1. Trích xuất tuần tự (CLIP -> BLIP -> BEiT)
+    step1_extract_features(limit=limit)
 
-    # 1. Train LoRA trên CPU
-    model, preprocess, _ = step1_train_lora(device=train_device, limit=limit, epochs=epochs, batch_size=batch_size)
+    # 2. Xây dựng FAISS Index nội bộ
+    index, metadata = step2_build_faiss_index(limit=limit)
 
-    # Chuyển mô hình sang GPU trước khi trích xuất đặc trưng (vì quá trình train đang dùng CPU)
-    logger.info("Chuyển model sang %s để trích xuất ảnh...", gpu_device)
-    model = model.to(gpu_device)
-
-    # 2. Trích xuất đặc trưng bằng GPU
-    step2_extract_features(model, preprocess, device=gpu_device, limit=limit)
-
-    # 3. Push Qdrant FULL 22,248 keyframe
-    client = step3_push_to_qdrant(limit=limit)
-
-    # 4. Search & Output Artifact (Score + Images)
-    step4_query_and_generate_artifact(client, query_text="một bức ảnh về cái cây")
+    # 3. Query Text -> Vector -> Search FAISS
+    step3_query(index, metadata, query_text="một bức ảnh về cái cây")
 
 
 if __name__ == "__main__":

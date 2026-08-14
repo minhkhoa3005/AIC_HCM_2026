@@ -38,8 +38,8 @@ TRAIN_PAIRS_PATH = INDEX_DIR / "train_pairs.jsonl"
 
 # LoRA Fine-tune
 LORA_WEIGHTS_PATH = INDEX_DIR / "lora_weights.pt"
-LORA_RANK = int(os.getenv("LORA_RANK", "4"))
-LORA_ALPHA = float(os.getenv("LORA_ALPHA", "1.0"))
+LORA_RANK = int(os.getenv("LORA_RANK", "16"))
+LORA_ALPHA = float(os.getenv("LORA_ALPHA", "16.0"))
 USE_LORA = os.getenv("USE_LORA", "auto").lower()  # "auto" | "true" | "false"
 
 # BTC Data Directories
