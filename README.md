@@ -1,89 +1,46 @@
 # AIC 2026 Video Query
 
-Pipeline truy vấn video cho AI Challenge 2026. Hệ thống dùng LLM cho hai bước
-hiểu ngôn ngữ, sau đó chuyển kết quả thành danh sách truy vấn tiếng Anh cho
-CLIP.
+MVP truy vấn video cho AI Challenge 2026. Hệ thống chuẩn hóa câu hỏi tiếng Việt, lập kế hoạch truy vấn bằng LLM, rồi chuyển thành mô tả hình ảnh tiếng Anh cho CLIP.
 
-## Luồng Chính
+## Luồng xử lý
 
 ```text
-raw_query tiếng Việt
--> rewrite_query_with_llm
-   -> rewritten_query tiếng Việt có dấu
--> plan_query
-   -> task_type
-   -> QueryPlan semantic fields tiếng Việt có dấu
-   -> clip_queries tiếng Anh ASCII
--> build_clip_queries
--> retrieval.search_clip_text
--> rerank / QA / TRAKE
--> submission
+Vietnamese query
+  -> rewrite (sửa dấu, chính tả, viết tắt)
+  -> planner (QueryPlan đã kiểm tra)
+  -> English ASCII clip_queries
+  -> retrieval
+  -> rerank / QA / TRAKE
+  -> Prediction / CSV
 ```
 
-Có đúng hai lần gọi LLM:
+Có đúng 2 lần gọi LLM: `rewrite_query_with_llm()` và `plan_query()`. `QueryPlan` giữ cả `raw_query` và `rewritten_query`; các trường ngữ nghĩa dùng tiếng Việt có dấu, chỉ `clip_queries` là tiếng Anh ASCII.
 
-1. Rewrite: chỉ sửa chính tả, thiếu dấu và viết tắt; không dịch hoặc suy diễn.
-2. Planner: xác định loại truy vấn, bóc tách `QueryPlan` và sinh `clip_queries`.
-
-Query gốc luôn được giữ trong `QueryPlan.raw_query`. Bản rewrite nằm trong
-`QueryPlan.rewritten_query` để có thể kiểm tra semantic drift.
-
-## Các Loại Truy Vấn
-
-- `TEXTUAL_KIS`: tìm một khoảnh khắc hoặc keyframe theo mô tả hình ảnh.
-- `QA`: tìm bằng chứng hình ảnh rồi trả lời câu hỏi.
-- `TRAKE`: tìm chuỗi sự kiện theo đúng thứ tự thời gian.
-
-## Contract
-
-```python
-QueryPlan(
-    raw_query="Tìm cảnh ng đàn ông mặc áo đỏ mở cửa xe trắng.",
-    rewritten_query="Tìm cảnh người đàn ông mặc áo đỏ mở cửa xe trắng.",
-    task_type=TaskType.TEXTUAL_KIS,
-    search_description="người đàn ông mặc áo đỏ mở cửa xe trắng",
-    objects=["người đàn ông", "xe trắng"],
-    actions=["mở cửa"],
-    clip_queries=[
-        "a man in a red shirt opening the door of a white car",
-        "a white car with an open door",
-    ],
-)
-```
-
-Các trường semantic giữ tiếng Việt có dấu. Chỉ `clip_queries` dùng tiếng Anh
-ASCII vì đây là input của CLIP. `build_clip_queries` không dịch hoặc tự tạo
-fallback; nó chỉ kiểm tra và trả về output của planner.
-
-## Cấu Trúc
+## Các gói mã nguồn
 
 ```text
-llm/
-  rewrite.py       Rewrite tiếng Việt có dấu
-  planner.py       Planner đầy đủ và prompt inline
-  schemas.py       QueryPlan, Candidate, Entity, TrakeEvent
-  validator.py     Validate JSON thành QueryPlan
-  query_builder.py Adapter QueryPlan -> list[str] cho CLIP
-  llm_client.py    Adapter provider và JSON response
-  providers/       API key pool dùng cho xoay key
-
-retrieval/         Contract và mock CLIP retrieval
-pipeline/          Controller, rerank, QA, TRAKE, checkpoint
-submission/        Xuất CSV và cấu hình submission
+llm/          Rewrite, lập QueryPlan, validate, cấu hình Gemini và xoay API key
+retrieval/    Kiểu dữ liệu retrieval, interface CLIP và mock dùng offline
+pipeline/     Điều phối đơn/lô truy vấn, RRF rerank, QA, TRAKE, checkpoint JSONL
+submission/   Prediction, override thủ công và xuất CSV có cấu hình
 ```
 
-## Cấu Hình
+- `TEXTUAL_KIS`: trả về các keyframe được xếp hạng.
+- `QA`: chọn bằng chứng tốt nhất; câu trả lời dự phòng lấy OCR, rồi ASR.
+- `TRAKE`: ghép một chuỗi frame tăng dần theo thứ tự sự kiện.
 
-```env
-LLM_PROVIDER=gemini
-LLM_API_KEYS=key1,key2,key3
-LLM_MODEL=gemini-2.5-flash
-LLM_REWRITE_TEMPERATURE=0
-LLM_PLANNER_TEMPERATURE=0
-```
+`retrieval.search_clip_text()` hiện là interface chưa cài CLIP/FAISS. Dùng `retrieval.mock_search_clip_text` để kiểm tra luồng offline hoặc truyền hàm retrieval thật vào `pipeline.run_query()` / `pipeline.run_batch()`.
 
-## Chạy Test
+## Cấu hình và tài liệu kèm theo
+
+Sao chép `.env.example` thành `.env` và đặt khóa theo biến duy nhất `LLM_API_KEYS` (phân cách bằng dấu phẩy). Provider hiện tại là Gemini (`google-genai`). `requirements.txt` chứa các phụ thuộc Python.
+
+`testlist.txt` là bộ truy vấn mẫu QA, TEXTUAL_KIS và TRAKE; `test.txt` là lệnh chạy thử thủ công. Các PDF, ảnh và ghi chú ở thư mục gốc là tài liệu/tham chiếu dự án, không phải mã nguồn chạy.
+
+## Cài đặt
 
 ```powershell
-pytest -q
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+Chưa có CLI và chưa có thư mục kiểm thử tự động trong checkout hiện tại. Khi tích hợp retrieval thật, giữ nguyên contract `list[str] -> list[QueryRetrievalResult]` để pipeline và export CSV hoạt động không đổi.
