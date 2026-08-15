@@ -36,11 +36,6 @@ SCENE_METADATA_PATH = INDEX_DIR / "scene_metadata.json"
 PROJECTION_HEAD_PATH = INDEX_DIR / "projection_head.pt"
 TRAIN_PAIRS_PATH = INDEX_DIR / "train_pairs.jsonl"
 
-# LoRA Fine-tune
-LORA_WEIGHTS_PATH = INDEX_DIR / "lora_weights.pt"
-LORA_RANK = int(os.getenv("LORA_RANK", "16"))
-LORA_ALPHA = float(os.getenv("LORA_ALPHA", "16.0"))
-USE_LORA = os.getenv("USE_LORA", "auto").lower()  # "auto" | "true" | "false"
 
 # BTC Data Directories
 KEYFRAMES_DIR = ROOT_DIR / "data" / "keyframes"
@@ -105,13 +100,3 @@ MAX_TOP_K = 100
 AMBIGUITY_MARGIN_THRESHOLD = 0.04
 CLARIFICATION_TOP_K = 4
 MIN_SCORE_TO_CONSIDER = 0.15
-
-# Remote Vector DB Configuration (Qdrant)
-USE_REMOTE_VECTOR_DB = os.getenv("USE_REMOTE_VECTOR_DB", "false").lower() in ("true", "1", "yes")
-VECTOR_DB_TYPE = os.getenv("VECTOR_DB_TYPE", "qdrant")
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-QDRANT_URL = os.getenv("QDRANT_URL", None)
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
-QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "aic2026_keyframes")
-QDRANT_PREFER_GRPC = os.getenv("QDRANT_PREFER_GRPC", "false").lower() in ("true", "1", "yes")

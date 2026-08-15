@@ -293,20 +293,156 @@ def step3_query(index, metadata, query_text: str = "một bức ảnh về cái 
     logger.info("Đã lưu kết quả truy vấn tại: %s", md_file)
 
 
+def step4_temporal_query(index, metadata, temporal_query_text: str = "một người dẫn chương trình -> giao thông đường phố", max_gap_sec: float = 120.0, top_k_candidates: int = 50, top_k_results: int = 5):
+    """Bước 4: Tìm kiếm theo thời gian đa giai đoạn (Multi-stage Temporal Search)."""
+    import re
+    logger.info("=== BƯỚC 4: TÌM KIẾM THEO THỜI GIAN ĐA GIAI ĐOẠN (TEMPORAL SEARCH) ===")
+    if index is None: return
+
+    # 1. Phân rã chuỗi truy vấn
+    raw_sub_queries = re.split(r'->|sau đó|then|rồi', temporal_query_text, flags=re.IGNORECASE)
+    sub_queries = [sq.strip() for sq in raw_sub_queries if sq.strip()]
+    
+    if len(sub_queries) < 2:
+        logger.warning("Câu truy vấn không có từ nối thời gian. Đang chuyển về Query đơn.")
+        step3_query(index, metadata, temporal_query_text)
+        return
+
+    logger.info("Phát hiện %d sự kiện nối tiếp trong chuỗi:", len(sub_queries))
+    for idx, sq in enumerate(sub_queries):
+        logger.info("  [Sự kiện %d]: %s", idx + 1, sq)
+
+    model_clip, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='laion2b_s32b_b82k', device=DEVICE)
+    tokenizer = open_clip.get_tokenizer('ViT-L-14')
+
+    sub_query_candidates = []
+    target_dim = index.d
+
+    for sq in sub_queries:
+        try:
+            sq_en = GoogleTranslator(source='vi', target='en').translate(sq)
+        except Exception:
+            sq_en = sq
+            
+        text_tokens = tokenizer([sq_en]).to(DEVICE)
+        with torch.no_grad():
+            text_feat = model_clip.encode_text(text_tokens)
+            text_feat = (text_feat / text_feat.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0)
+
+        if target_dim > text_feat.shape[0]:
+            padding = np.zeros(target_dim - text_feat.shape[0], dtype=np.float32)
+            query_super = np.concatenate([text_feat, padding]).astype(np.float32)
+        else:
+            query_super = text_feat.astype(np.float32)
+
+        query_super = query_super.reshape(1, -1)
+        faiss.normalize_L2(query_super)
+
+        scores, indices = index.search(query_super, top_k_candidates)
+        
+        candidates = []
+        for i in range(top_k_candidates):
+            idx = indices[0][i]
+            score = scores[0][i]
+            if 0 <= idx < len(metadata):
+                item = metadata[idx].copy()
+                item["score"] = float(score)
+                candidates.append(item)
+        sub_query_candidates.append(candidates)
+
+    candidates_A = sub_query_candidates[0]
+    candidates_B = sub_query_candidates[1]
+
+    video_to_B = {}
+    for item_b in candidates_B:
+        vid = item_b["video_id"]
+        if vid not in video_to_B:
+            video_to_B[vid] = []
+        video_to_B[vid].append(item_b)
+
+    temporal_matches = []
+    for item_a in candidates_A:
+        vid = item_a["video_id"]
+        pts_a = item_a.get("pts_time", 0.0)
+        score_a = item_a["score"]
+
+        if vid in video_to_B:
+            for item_b in video_to_B[vid]:
+                pts_b = item_b.get("pts_time", 0.0)
+                score_b = item_b["score"]
+
+                if 0 < (pts_b - pts_a) <= max_gap_sec:
+                    time_gap = pts_b - pts_a
+                    combined_score = score_a + score_b - (time_gap / max_gap_sec) * 0.05
+                    temporal_matches.append({
+                        "video_id": vid,
+                        "event_a": item_a,
+                        "event_b": item_b,
+                        "time_gap": time_gap,
+                        "combined_score": combined_score
+                    })
+
+    temporal_matches.sort(key=lambda x: x["combined_score"], reverse=True)
+
+    artifact_dir = Path("C:/Users/Administrator/.gemini/antigravity-ide/brain/c606a4f6-beb2-4fa0-a0f2-46a8ba7ee5b1")
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    md_content = f"# Kết quả Tìm Kiếm Theo Thời Gian (Temporal Search)\n\n"
+    md_content += f"- **Chuỗi truy vấn**: `{temporal_query_text}`\n"
+    md_content += f"- **Sự kiện A**: `{sub_queries[0]}`\n"
+    md_content += f"- **Sự kiện B**: `{sub_queries[1]}`\n"
+    md_content += f"- **Giới hạn khoảng cách thời gian**: `{max_gap_sec}s`\n\n"
+    md_content += f"| Top | Combined Score | Video ID | Sự kiện A (Frame/Time) | Sự kiện B (Frame/Time) | Khoảng cách |\n"
+    md_content += f"| :---: | :---: | :---: | :---: | :---: | :---: |\n"
+
+    for i in range(min(top_k_results, len(temporal_matches))):
+        match = temporal_matches[i]
+        vid = match["video_id"]
+        ea = match["event_a"]
+        eb = match["event_b"]
+        gap = match["time_gap"]
+        c_score = match["combined_score"]
+
+        img_a_path = Path(ea.get("path", ""))
+        img_b_path = Path(eb.get("path", ""))
+        
+        artifact_a = artifact_dir / f"temporal_{vid}_A_{ea.get('frame_id',0)}.jpg"
+        artifact_b = artifact_dir / f"temporal_{vid}_B_{eb.get('frame_id',0)}.jpg"
+
+        if img_a_path.exists():
+            try: Image.open(img_a_path).save(artifact_a)
+            except: pass
+        if img_b_path.exists():
+            try: Image.open(img_b_path).save(artifact_b)
+            except: pass
+
+        md_content += f"| **#{i+1:02d}** | `{c_score:.4f}` | `{vid}` | Frame {ea.get('frame_id')} ({ea.get('pts_time'):.1f}s) | Frame {eb.get('frame_id')} ({eb.get('pts_time'):.1f}s) | `{gap:.1f}s` |\n"
+
+    md_file = artifact_dir / "temporal_search_results.md"
+    with open(md_file, "w", encoding="utf-8") as f:
+        f.write(md_content)
+
+    logger.info("Đã lưu kết quả Temporal Search tại: %s", md_file)
+
+
 def main():
     limit = 0  # Đặt bằng 0 để chạy toàn bộ dataset
     
     logger.info("=== HỆ THỐNG SEARCH AIC 2026 (ENSEMBLE ZERO-SHOT) ===")
 
-    # 1. Trích xuất tuần tự (CLIP -> BLIP -> BEiT)
+    # 1. Trích xuất tuần tự
     step1_extract_features(limit=limit)
 
     # 2. Xây dựng FAISS Index nội bộ
     index, metadata = step2_build_faiss_index(limit=limit)
 
-    # 3. Query Text -> Vector -> Search FAISS
+    # 3. Query Đơn (Single Query)
     step3_query(index, metadata, query_text="một bức ảnh về cái cây")
+
+    # 4. Query Thời Gian (Temporal Query - Multi-stage)
+    step4_temporal_query(index, metadata, temporal_query_text="người dẫn chương trình -> giao thông đường phố")
 
 
 if __name__ == "__main__":
     main()
+
