@@ -245,7 +245,7 @@ def step3_query(index, metadata, query_text: str = "một bức ảnh về cái 
     top_k = 5
     scores, indices = index.search(query_super, top_k)
     
-    artifact_dir = Path("C:/Users/Administrator/.gemini/antigravity-ide/brain/c606a4f6-beb2-4fa0-a0f2-46a8ba7ee5b1")
+    artifact_dir = Path("search_results").resolve()
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     md_content = f"# Kết quả Tìm Kiếm bằng Ensemble + FAISS\n\n"
@@ -383,7 +383,7 @@ def step4_temporal_query(index, metadata, temporal_query_text: str = "một ngư
 
     temporal_matches.sort(key=lambda x: x["combined_score"], reverse=True)
 
-    artifact_dir = Path("C:/Users/Administrator/.gemini/antigravity-ide/brain/c606a4f6-beb2-4fa0-a0f2-46a8ba7ee5b1")
+    artifact_dir = Path("search_results").resolve()
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     md_content = f"# Kết quả Tìm Kiếm Theo Thời Gian (Temporal Search)\n\n"
