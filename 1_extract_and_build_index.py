@@ -228,16 +228,9 @@ def step3_query(index, metadata, query_text: str = "một bức ảnh về cái 
         text_feat = model_clip.encode_text(text_tokens)
         text_feat = (text_feat / text_feat.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0) # [768]
         
-    # [WORKAROUND]: Vì ta nối CLIP(768) + BLIP(1408) + BEiT(768) = 2944 chiều
-    # Để query khớp với vector ảnh, ta cần nội suy/độn thêm vector Text cho đủ 2944.
-    # Chiến thuật tạm: Độn các số 0 vào vị trí của BLIP và BEiT. Bằng cách này, FAISS
-    # sẽ chỉ chấm điểm (Cosine) dựa trên phần 768 chiều đầu tiên (CLIP), giữ nguyên sức mạnh Text của CLIP.
-    target_dim = index.d
-    if target_dim > text_feat.shape[0]:
-        padding = np.zeros(target_dim - text_feat.shape[0], dtype=np.float32)
-        query_super = np.concatenate([text_feat, padding]).astype(np.float32)
-    else:
-        query_super = text_feat.astype(np.float32)
+    # Vì FAISS Index sẽ được rebuild xuống 768d (ở Bước 3)
+    # Ta có thể truyền thẳng vector chữ 768d của CLIP vào FAISS
+    query_super = text_feat.astype(np.float32)
         
     # Query FAISS
     query_super = query_super.reshape(1, -1)
