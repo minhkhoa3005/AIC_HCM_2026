@@ -125,8 +125,13 @@ def main():
     device = DEVICE
     
     # Nạp mô hình ngôn ngữ (Text Encoder của CLIP) để tạo target
-    logger.info("Đang nạp mô hình ngôn ngữ CLIP để làm giám khảo (đóng băng)...")
-    clip_model, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='laion2b_s32b_b82k', device=device)
+    logger.info("Đang nạp mô hình ngôn ngữ CLIP (FP16) để làm giám khảo (đóng băng)...")
+    clip_model, _, _ = open_clip.create_model_and_transforms(
+        'ViT-L-14', 
+        pretrained='laion2b_s32b_b82k', 
+        precision='fp16', 
+        device=device
+    )
     tokenizer = open_clip.get_tokenizer('ViT-L-14')
     clip_model.eval()
 
