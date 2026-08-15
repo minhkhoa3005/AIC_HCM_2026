@@ -467,8 +467,11 @@ def build_btc_metadata(
         raw_title = str(info.get("title") or video_id.replace("_", " "))
         
         # Dịch title sang Tiếng Anh
-        from backend.embedding.clip_encoder import translate_vi_to_en
-        title = translate_vi_to_en(raw_title)
+        try:
+            from deep_translator import GoogleTranslator
+            title = GoogleTranslator(source='vi', target='en').translate(raw_title)
+        except Exception:
+            title = raw_title
         
         frame_map = keyframe_maps.get(video_id, {})
 
