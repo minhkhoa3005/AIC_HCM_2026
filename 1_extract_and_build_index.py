@@ -419,7 +419,7 @@ def step4_temporal_query(index, metadata, temporal_query_text: str = "một ngư
 
 
 def main():
-    limit = 0  # Đặt bằng 0 để chạy toàn bộ dataset
+    limit = 10  # Đặt bằng 0 để chạy toàn bộ dataset
     
     logger.info("=== HỆ THỐNG SEARCH AIC 2026 (ENSEMBLE ZERO-SHOT) ===")
 
