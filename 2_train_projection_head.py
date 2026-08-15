@@ -111,7 +111,8 @@ def main():
         logger.error("Dataset trống. Hãy kiểm tra lại thư mục npy và file captions.")
         return
         
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    should_drop_last = len(dataset) > args.batch_size
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=should_drop_last)
 
     # Khởi tạo Mô hình Projection Head
     model = AICProjectionHead().to(device)
@@ -184,7 +185,7 @@ def main():
                 logger.info(f"Epoch [{epoch}/{args.epochs-1}] - Batch [{batch_idx}/{len(dataloader)}] - Loss: {loss.item():.4f}")
 
         # Tính trung bình loss của Epoch
-        avg_loss = total_loss / len(dataloader)
+        avg_loss = total_loss / max(1, len(dataloader))
         logger.info(f"--- KẾT THÚC EPOCH {epoch} | Average Loss: {avg_loss:.4f} ---")
         
         # [CƠ CHẾ AUTO-SAVE CHECKPOINT]
