@@ -101,8 +101,104 @@ class VectorSearchEngine:
             self.model_clip, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='laion2b_s32b_b82k', device=self.device)
             self.tokenizer = open_clip.get_tokenizer('ViT-L-14')
 
-    def search_single(self, query_text: str, top_k: int = 10):
-        """Truy vấn đơn lẻ (Single Query) với tự động dịch Vi -> En."""
+    def _get_vector_by_id(self, item_id: str):
+        """Lấy vector từ FAISS theo định dạng video_id_frame_id."""
+        for idx, meta in enumerate(self.metadata):
+            key = f"{meta['video_id']}_{meta.get('frame_id', 0)}"
+            if key == item_id:
+                try:
+                    vec = self.index.reconstruct(idx)
+                    return vec
+                except Exception as e:
+                    logger.warning(f"Không thể reconstruct vector cho {item_id}: {e}")
+                    return None
+        return None
+
+    def apply_rocchio(self, query_vector: np.ndarray, liked_ids: list, disliked_ids: list, alpha=1.0, beta=0.75, gamma=0.15):
+        """Áp dụng thuật toán Rocchio Feedback."""
+        new_query = alpha * query_vector
+
+        # Xử lý Likes
+        if liked_ids:
+            liked_vectors = []
+            for lid in liked_ids:
+                vec = self._get_vector_by_id(lid)
+                if vec is not None:
+                    liked_vectors.append(vec)
+            if liked_vectors:
+                mean_liked = np.mean(liked_vectors, axis=0)
+                new_query += beta * mean_liked
+
+        # Xử lý Dislikes
+        if disliked_ids:
+            disliked_vectors = []
+            for did in disliked_ids:
+                vec = self._get_vector_by_id(did)
+                if vec is not None:
+                    disliked_vectors.append(vec)
+            if disliked_vectors:
+                mean_disliked = np.mean(disliked_vectors, axis=0)
+                new_query -= gamma * mean_disliked
+
+        faiss.normalize_L2(new_query)
+        return new_query
+
+    def mmr_rerank(self, query_vector: np.ndarray, candidates: list, lambda_param=0.5, top_k=20):
+        """Thuật toán Maximal Marginal Relevance (MMR) để Re-ranking."""
+        if not candidates:
+            return []
+            
+        # Lấy vector của các ứng viên
+        candidate_vectors = []
+        valid_candidates = []
+        for c in candidates:
+            vec = self._get_vector_by_id(f"{c['video_id']}_{c.get('frame_id', 0)}")
+            if vec is not None:
+                candidate_vectors.append(vec)
+                valid_candidates.append(c)
+                
+        if not valid_candidates:
+            return candidates[:top_k]
+
+        candidate_vectors = np.array(candidate_vectors)
+        
+        # Tính độ tương đồng với query (Relevance)
+        # candidates đã được sort theo FAISS IP score, ta có thể dùng lại score đó
+        relevance_scores = np.array([c['score'] for c in valid_candidates])
+        
+        # Khởi tạo
+        selected_indices = []
+        unselected_indices = list(range(len(valid_candidates)))
+        
+        # Chọn mục đầu tiên (có relevance cao nhất)
+        first_idx = np.argmax(relevance_scores)
+        selected_indices.append(first_idx)
+        unselected_indices.remove(first_idx)
+        
+        # Chọn các mục tiếp theo
+        while len(selected_indices) < top_k and unselected_indices:
+            # Tính similarity giữa unselected và selected
+            selected_vecs = candidate_vectors[selected_indices]
+            unselected_vecs = candidate_vectors[unselected_indices]
+            
+            # Cosine similarity (Inner product vì đã normalize)
+            sim_matrix = np.dot(unselected_vecs, selected_vecs.T)
+            max_sim_to_selected = np.max(sim_matrix, axis=1)
+            
+            # MMR Score = lambda * Relevance - (1-lambda) * Max_Sim_to_Selected
+            mmr_scores = lambda_param * relevance_scores[unselected_indices] - (1 - lambda_param) * max_sim_to_selected
+            
+            # Chọn item có MMR score cao nhất
+            max_idx_in_unselected = np.argmax(mmr_scores)
+            best_idx = unselected_indices[max_idx_in_unselected]
+            
+            selected_indices.append(best_idx)
+            unselected_indices.remove(best_idx)
+            
+        return [valid_candidates[i] for i in selected_indices]
+
+    def search_single(self, query_text: str, top_k: int = 10, liked_ids: list = None, disliked_ids: list = None, use_mmr: bool = False):
+        """Truy vấn đơn lẻ (Single Query) với tự động dịch Vi -> En, Rocchio Feedback và MMR."""
         if self.index is None:
             if not self.load_index():
                 raise RuntimeError("Chưa có FAISS Index. Vui lòng build index trước.")
@@ -127,10 +223,17 @@ class VectorSearchEngine:
         # Query FAISS
         query_super = query_super.reshape(1, -1)
         faiss.normalize_L2(query_super)
+        
+        # Áp dụng Rocchio Feedback
+        if liked_ids or disliked_ids:
+            query_super = self.apply_rocchio(query_super, liked_ids or [], disliked_ids or [])
 
-        scores, indices = self.index.search(query_super, top_k)
-        results = []
-        for i in range(top_k):
+        # Nếu dùng MMR, lấy nhiều candidate hơn (ví dụ: top_k * 5)
+        search_k = top_k * 5 if use_mmr else top_k
+        scores, indices = self.index.search(query_super, search_k)
+        
+        candidates = []
+        for i in range(search_k):
             idx = indices[0][i]
             score = float(scores[0][i])
             if 0 <= idx < len(self.metadata):
@@ -141,7 +244,13 @@ class VectorSearchEngine:
                     item["video_title_vi"] = GoogleTranslator(source='en', target='vi').translate(item.get("video_title", ""))
                 except:
                     item["video_title_vi"] = item.get("video_title", "")
-                results.append(item)
+                candidates.append(item)
+
+        # Áp dụng MMR Re-ranking
+        if use_mmr and candidates:
+            results = self.mmr_rerank(query_super, candidates, lambda_param=0.5, top_k=top_k)
+        else:
+            results = candidates[:top_k]
 
         return {"query_vi": query_text, "query_en": query_en, "results": results}
 

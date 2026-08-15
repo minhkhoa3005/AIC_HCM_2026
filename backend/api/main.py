@@ -49,6 +49,16 @@ class SearchResponse(BaseModel):
     results: List[ResultItem]
 
 
+class AdvancedSearchRequest(BaseModel):
+    query: str
+    top_k: int = 20
+    task_type: str = "kis"
+    answer: Optional[str] = None
+    liked_ids: Optional[List[str]] = []
+    disliked_ids: Optional[List[str]] = []
+    use_mmr: bool = False
+
+
 @app.get("/")
 def home():
     return {"status": "ok", "message": "API Video Search Agent (Ensemble 2304d + Temporal) đang hoạt động!"}
@@ -93,6 +103,59 @@ def search(
         f_id = str(item.get("frame_id", 0))
         pts = float(item.get("pts_time", 0.0))
         sub_line = f"{vid}, {f_id}, {answer}" if (task_type == "qa" and answer) else f"{vid}, {f_id}"
+
+        results.append(ResultItem(
+            video_id=vid,
+            video_title=item.get("video_title_vi", item.get("video_title", vid)),
+            score=float(item.get("score", 0.0)),
+            pts_time=pts,
+            frame_id=f_id,
+            submission=sub_line
+        ))
+
+    return SearchResponse(query_vi=res["query_vi"], query_en=res["query_en"], results=results)
+
+@app.post("/search_advanced", response_model=SearchResponse)
+def search_advanced(req: AdvancedSearchRequest):
+    if search_engine.index is None:
+        return SearchResponse(query_vi=req.query, results=[])
+
+    # Nếu câu truy vấn có ký tự nối thời gian -> Chuyển sang Temporal Search
+    if any(sep in req.query.lower() for sep in ["->", "sau đó", "then", "rồi"]):
+        temp_res = search_engine.search_temporal(req.query, top_k=req.top_k)
+        results = []
+        for match in temp_res.get("matches", []):
+            vid = match["video_id"]
+            eb = match["event_b"]
+            f_id = str(eb.get("frame_id", 0))
+            pts = float(eb.get("pts_time", 0.0))
+            sub_line = f"{vid}, {f_id}, {req.answer}" if (req.task_type == "qa" and req.answer) else f"{vid}, {f_id}"
+
+            results.append(ResultItem(
+                video_id=vid,
+                video_title=eb.get("video_title_vi", eb.get("video_title", vid)),
+                score=float(match["combined_score"]),
+                pts_time=pts,
+                frame_id=f_id,
+                submission=sub_line
+            ))
+        return SearchResponse(query_vi=req.query, results=results)
+
+    # Truy vấn đơn với MMR và Rocchio
+    res = search_engine.search_single(
+        req.query, 
+        top_k=req.top_k,
+        liked_ids=req.liked_ids,
+        disliked_ids=req.disliked_ids,
+        use_mmr=req.use_mmr
+    )
+    
+    results = []
+    for item in res.get("results", []):
+        vid = str(item.get("video_id", "N/A"))
+        f_id = str(item.get("frame_id", 0))
+        pts = float(item.get("pts_time", 0.0))
+        sub_line = f"{vid}, {f_id}, {req.answer}" if (req.task_type == "qa" and req.answer) else f"{vid}, {f_id}"
 
         results.append(ResultItem(
             video_id=vid,
