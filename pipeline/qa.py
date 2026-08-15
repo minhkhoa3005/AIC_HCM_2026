@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from llm.schemas import Candidate, QueryPlan
 from llm.task_types import TaskType
+from retrieval.models import FusedCandidate
 
 from .prediction import Prediction
 
 
-def answer_qa(query_id: str, plan: QueryPlan, candidates: list[Candidate]) -> list[Prediction]:
+def answer_qa(
+    query_id: str, plan: QueryPlan, candidates: list[FusedCandidate]
+) -> list[Prediction]:
     """Create QA predictions with a deterministic evidence fallback."""
 
     if not candidates:
         return []
-    candidate = candidates[0]
+    fused_candidate = candidates[0]
+    candidate = fused_candidate.candidate
     answer = _fallback_answer(candidate)
     return [
         Prediction(
@@ -23,7 +27,7 @@ def answer_qa(query_id: str, plan: QueryPlan, candidates: list[Candidate]) -> li
             video_id=candidate.video_id,
             frame_ids=[candidate.frame_id],
             answer=answer,
-            score=candidate.clip_score,
+            score=fused_candidate.score,
         )
     ]
 

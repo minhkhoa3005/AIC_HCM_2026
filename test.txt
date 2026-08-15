@@ -4,10 +4,13 @@ from llm.planner import plan_query
 from llm.query_builder import build_clip_queries
 
 query = """
-"Tìm khung hình có bốn người phụ nữ đứng thành hàng và cầm giấy."
+Trong video phát sóng truyền hình, hãy tìm khung hình có logo HTV9 HD và thời gian 06:39:42 ở góc trên bên phải. Trong khung hình có bốn người
+phụ nữ đứng cạnh nhau từ trái sang phải và đều cầm giấy. Hãy cho biết người thứ hai từ trái mặc áo màu gì, người thứ ba có mặc áo khoác hay
+không, người ngoài cùng bên phải có cầm giấy bằng cả hai tay không, logo kênh và thời gian hiển thị là gì, đồng thời tổng cộng có bao nhiêu
+người phụ nữ đang cầm giấy. Nếu chữ trên giấy không đủ rõ thì trả lời UNKNOWN, không suy đoán.
 """
 
-plan = plan_query(query, config=get_llm_config())
+plan = plan_query(query.strip(), config=get_llm_config())
 
 print("=== TASK TYPE ===")
 print(plan.task_type.value)

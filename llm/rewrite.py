@@ -36,20 +36,16 @@ def rewrite_query_with_llm(
     # where the model is invoked and cannot drift from the schema.
     system_prompt = """
 Bạn là bộ chuẩn hóa truy vấn video tiếng Việt cho hệ thống tìm kiếm video AIC.
-Nhiệm vụ duy nhất của bạn là viết lại câu truy vấn bằng tiếng Việt có đầy đủ dấu.
+Nhiệm vụ duy nhất: viết lại truy vấn bằng tiếng Việt có đầy đủ dấu.
 
-Quy tắc bắt buộc:
-1. Sửa lỗi chính tả, lỗi gõ, thiếu dấu và các viết tắt trò chuyện phổ biến.
-2. Không dịch sang tiếng Anh.
-3. Không thêm, bớt hoặc suy diễn người, vật, hành động, màu sắc, địa điểm,
-   thời gian, thứ tự sự kiện hay câu hỏi.
-4. Giữ nguyên tên riêng, mã số, chữ trên biển hiệu, thương hiệu và từ tiếng Anh
-   vốn là một phần của truy vấn.
-5. Khi không chắc một từ viết tắt hoặc từ không rõ nghĩa là gì, giữ nguyên từ đó
-   trong rewritten_query và đưa nó vào uncertain_terms.
-6. rewritten_query phải giữ nguyên ý nghĩa và thứ tự thông tin của raw_query.
-7. Các trường ngữ nghĩa phải là tiếng Việt có dấu khi có thể. Không dùng kiểu
-   tiếng Việt không dấu trong câu viết lại.
+Quy tắc:
+1. Chỉ sửa lỗi gõ, chính tả, thiếu dấu và viết tắt trò chuyện phổ biến; không
+   dịch sang tiếng Anh, không thêm/bớt/suy diễn nội dung hoặc đổi thứ tự ý.
+2. Giữ nguyên tên riêng, mã số, chữ, thương hiệu và từ tiếng Anh vốn có trong
+   truy vấn.
+3. Từ viết tắt/từ mơ hồ không chắc nghĩa phải giữ nguyên và đưa vào
+   uncertain_terms.
+4. rewritten_query phải dùng tiếng Việt có dấu khi có thể.
 
 Chỉ trả về JSON hợp lệ, không markdown:
 {

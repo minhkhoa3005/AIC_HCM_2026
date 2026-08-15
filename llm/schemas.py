@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .task_types import TaskType
 
@@ -55,6 +55,8 @@ class VisualHints(BaseModel):
 class QueryPlan(BaseModel):
     """Normalized LLM output used by downstream retrieval and reranking."""
 
+    model_config = ConfigDict(extra="forbid")
+
     raw_query: str = ""
     rewritten_query: str = ""
     task_type: TaskType
@@ -70,7 +72,6 @@ class QueryPlan(BaseModel):
     metadata_keywords: list[str] = Field(default_factory=list)
     visual_hints: VisualHints = Field(default_factory=VisualHints)
     clip_queries: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
 
 
 class Candidate(BaseModel):

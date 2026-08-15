@@ -8,17 +8,17 @@ from typing import Any
 from llm.config import LLMConfig
 from llm.planner import plan_query
 from llm.query_builder import build_clip_queries
-from llm.schemas import Candidate
 from llm.task_types import TaskType
 from retrieval.contract import search_clip_text
+from retrieval.models import QueryRetrievalResult
 
 from .checkpoint import QueryCheckpoint
 from .prediction import Prediction
 from .qa import answer_qa
-from .rerank import rerank_candidates
+from .rerank import fuse_retrieval_results
 from .trake import align_trake
 
-SearchFn = Callable[[list[str], int], list[Candidate]]
+SearchFn = Callable[[list[str], int], list[QueryRetrievalResult]]
 
 
 def run_query(
@@ -40,20 +40,23 @@ def run_query(
         planner_client=llm_planner_client,
     )
     clip_queries = build_clip_queries(plan)
-    candidates = rerank_candidates(search_fn(clip_queries, top_k), plan)
+    retrieval_results = search_fn(clip_queries, top_k)
+
+    if plan.task_type == TaskType.TRAKE:
+        return align_trake(query_id, plan, retrieval_results)
+
+    candidates = fuse_retrieval_results(retrieval_results, plan)
 
     if plan.task_type == TaskType.QA:
         return answer_qa(query_id, plan, candidates)
-    if plan.task_type == TaskType.TRAKE:
-        return align_trake(query_id, plan, candidates)
     return [
         Prediction(
             query_id=query_id,
             task_type=plan.task_type,
             rank=index,
-            video_id=candidate.video_id,
-            frame_ids=[candidate.frame_id],
-            score=candidate.clip_score,
+            video_id=candidate.candidate.video_id,
+            frame_ids=[candidate.candidate.frame_id],
+            score=candidate.score,
         )
         for index, candidate in enumerate(candidates, start=1)
     ]
