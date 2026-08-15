@@ -48,9 +48,9 @@ class AICProjectionHead(nn.Module):
         return out
 
 
-# 2. Xây dựng Dataset Đọc Vector từ Đĩa
+# 2. Xây dựng Dataset (Tải vào RAM và tính toán trước)
 class AICDataset(Dataset):
-    def __init__(self, captions_file):
+    def __init__(self, captions_file, clip_model, tokenizer, device):
         self.data = []
         if not os.path.exists(captions_file):
             raise FileNotFoundError(f"Không tìm thấy file captions: {captions_file}")
@@ -58,29 +58,48 @@ class AICDataset(Dataset):
         with open(captions_file, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
             
+        translator = GoogleTranslator(source='vi', target='en')
+        
+        logger.info("Đang tính toán trước Vector Ngôn ngữ (Pre-computing Text Features)...")
         for item in raw_data:
             key = item["key"]
-            caption = item["caption"]
+            caption_vi = item["caption"]
             npy_path = ENSEMBLE_DIR / f"{key}.npy"
             if npy_path.exists():
-                self.data.append({"path": npy_path, "caption": caption})
+                # Load vision
+                vec = np.load(npy_path).astype(np.float32)
                 
-        logger.info(f"Đã load {len(self.data)} cặp dữ liệu hợp lệ.")
+                # Translate
+                try:
+                    caption_en = translator.translate(caption_vi)
+                except Exception:
+                    caption_en = caption_vi
+                    
+                # Encode Text
+                with torch.no_grad():
+                    tokens = tokenizer([caption_en]).to(device)
+                    text_feat = clip_model.encode_text(tokens)
+                    text_feat = F.normalize(text_feat, p=2, dim=-1).cpu().squeeze(0)
+                    
+                self.data.append({
+                    "vision": torch.tensor(vec),
+                    "text": text_feat
+                })
+                
+        logger.info(f"Đã nạp sẵn vào RAM {len(self.data)} cặp vector (Vision + Text) thành công.")
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         item = self.data[idx]
-        vec = np.load(item["path"]).astype(np.float32)
-        return torch.tensor(vec), item["caption"]
+        return item["vision"], item["text"]
 
 
 # 3. Hàm tính Mất mát Contrastive (InfoNCE Loss)
 def contrastive_loss(image_features, text_features, logit_scale):
     """
     Tính loss 2 chiều: Ảnh -> Chữ và Chữ -> Ảnh.
-    Hàm này ép các cặp (Ảnh i, Chữ i) lại gần nhau và đẩy các cặp chéo nhau ra xa.
     """
     logits_per_image = logit_scale * image_features @ text_features.t()
     logits_per_text = logits_per_image.t()
@@ -105,14 +124,25 @@ def main():
 
     device = DEVICE
     
+    # Nạp mô hình ngôn ngữ (Text Encoder của CLIP) để tạo target
+    logger.info("Đang nạp mô hình ngôn ngữ CLIP để làm giám khảo (đóng băng)...")
+    clip_model, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='laion2b_s32b_b82k', device=device)
+    tokenizer = open_clip.get_tokenizer('ViT-L-14')
+    clip_model.eval()
+
     # Chuẩn bị Dữ liệu
-    dataset = AICDataset(args.captions)
+    dataset = AICDataset(args.captions, clip_model, tokenizer, device)
     if len(dataset) == 0:
         logger.error("Dataset trống. Hãy kiểm tra lại thư mục npy và file captions.")
         return
         
     should_drop_last = len(dataset) > args.batch_size
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=should_drop_last)
+
+    # Giải phóng CLIP model khỏi VRAM sau khi đã pre-compute xong text features!
+    del clip_model
+    torch.cuda.empty_cache()
+    logger.info("Đã giải phóng mô hình CLIP khỏi VRAM để nhường chỗ cho huấn luyện.")
 
     # Khởi tạo Mô hình Projection Head
     model = AICProjectionHead().to(device)
@@ -137,37 +167,16 @@ def main():
     else:
         logger.info("Chế độ: Huấn luyện TỪ ĐẦU (Train from scratch).")
 
-    # Nạp mô hình ngôn ngữ (Text Encoder của CLIP) để tạo target
-    # Text Encoder này được GIỮ NGUYÊN (Đóng băng hoàn toàn)
-    logger.info("Đang nạp mô hình ngôn ngữ CLIP để làm giám khảo (đóng băng)...")
-    clip_model, _, _ = open_clip.create_model_and_transforms('ViT-L-14', pretrained='laion2b_s32b_b82k', device=device)
-    tokenizer = open_clip.get_tokenizer('ViT-L-14')
-    clip_model.eval()
-
     logger.info(f"=== BẮT ĐẦU HUẤN LUYỆN ({'RESUME' if args.resume else 'SCRATCH'}) ===")
-    translator = GoogleTranslator(source='vi', target='en')
 
     model.train()
     for epoch in range(start_epoch, args.epochs):
         total_loss = 0.0
         
-        for batch_idx, (vision_feats, texts_vi) in enumerate(dataloader):
+        for batch_idx, (vision_feats, text_features) in enumerate(dataloader):
             vision_feats = vision_feats.to(device)
+            text_features = text_features.to(device)
             
-            # [Dịch tự động on the fly] Vi -> En
-            texts_en = []
-            for text_vi in texts_vi:
-                try:
-                    texts_en.append(translator.translate(text_vi))
-                except:
-                    texts_en.append(text_vi) # Lỗi thì giữ nguyên
-                    
-            # Encode Text bằng CLIP (Không tính đạo hàm)
-            with torch.no_grad():
-                text_tokens = tokenizer(texts_en).to(device)
-                text_features = clip_model.encode_text(text_tokens)
-                text_features = F.normalize(text_features, p=2, dim=-1)
-
             # Đẩy ảnh qua Projection Head
             optimizer.zero_grad()
             projected_vision_features = model(vision_feats)
