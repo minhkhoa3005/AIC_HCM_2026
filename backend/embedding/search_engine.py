@@ -216,9 +216,13 @@ class VectorSearchEngine:
             text_feat = self.model_clip.encode_text(text_tokens)
             text_feat = (text_feat / text_feat.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0)
 
-        # Vì FAISS Index đã được rebuild xuống 768d nhờ Projection Head
-        # Ta có thể truyền thẳng vector chữ 768d của CLIP vào FAISS
-        query_super = text_feat.astype(np.float32)
+        # Padding vector nếu FAISS Index là 2304d (chưa qua Projection Head)
+        target_dim = self.index.d
+        if target_dim > text_feat.shape[0]:
+            padding = np.zeros(target_dim - text_feat.shape[0], dtype=np.float32)
+            query_super = np.concatenate([text_feat, padding]).astype(np.float32)
+        else:
+            query_super = text_feat.astype(np.float32)
 
         # Query FAISS
         query_super = query_super.reshape(1, -1)

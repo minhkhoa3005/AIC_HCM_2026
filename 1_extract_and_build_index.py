@@ -89,7 +89,10 @@ def step1_extract_features(limit: int = 1000):
 
     logger.info("-> Bắt đầu trích xuất song song qua 1 vòng lặp...")
     with torch.no_grad():
-        for item in items:
+        for i, item in enumerate(items):
+            if i > 0 and i % 500 == 0:
+                logger.info(f"Đang xử lý: Đã chạy {i}/{len(items)} ảnh...")
+                
             key = f"{item['video_id']}_{item.get('frame_id', 0)}"
             img_path = Path(item["path"])
             
@@ -422,7 +425,7 @@ def step4_temporal_query(index, metadata, temporal_query_text: str = "một ngư
 
 
 def main():
-    limit = 0  # Đặt bằng 0 để chạy toàn bộ dataset
+    limit = 10  # Đặt bằng 0 để chạy toàn bộ dataset
     
     logger.info("=== HỆ THỐNG SEARCH AIC 2026 (ENSEMBLE ZERO-SHOT) ===")
 
