@@ -55,8 +55,8 @@ WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "vi")
 
-# Embedding / CLIP Model
-CLIP_MODEL_NAME = os.getenv("CLIP_MODEL_NAME", "ViT-B/32")
+# Embedding / Ensemble Models
+CLIP_MODEL_NAME = os.getenv("CLIP_MODEL_NAME", "ViT-L-14")
 import torch
 
 def _get_default_device():
@@ -76,8 +76,9 @@ def _get_default_device():
 
 DEVICE = _get_default_device()
 TEMPORAL_CHECKPOINT_PATH = INDEX_DIR / "temporal_encoder.pt"
-EMBED_DIM = 512
-PROJECTED_DIM = 256
+ENSEMBLE_EMBED_DIM = 2304  # CLIP (768) + BLIP (768) + BEiT (768)
+EMBED_DIM = 768
+PROJECTED_DIM = 768
 KEYFRAME_POSITIONS = (0.25, 0.5, 0.75)
 TEXT_EMBED_WEIGHT = 0.65
 VISUAL_EMBED_WEIGHT = 0.35

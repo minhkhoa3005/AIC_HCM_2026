@@ -1,12 +1,15 @@
 """
-Huấn luyện Projection Head tối ưu:
-- Khống chế False Negative bằng UniqueVideoBatchSampler
+Huấn luyện Projection Head tối ưu cho 3-Model Ensemble (2304d -> 768d):
+- Hỗ trợ 2 chế độ: Train from scratch & Resume Checkpoint (--resume)
 - Set Global Seed toàn cục
 - Learnable Logit Scale (Temperature)
 - Gradient Clipping
-- Lưu đầy đủ Hyperparameters vào Checkpoint
+- Save Checkpoint đầy đủ
 """
+import os
 import random
+import argparse
+import logging
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,27 +17,22 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from backend.config import (
-    CLIP_MODEL_NAME,
     DEVICE,
+    ENSEMBLE_EMBED_DIM,
     EMBED_DIM,
-    PROJECTED_DIM,
     PROJECTION_HEAD_PATH,
     TEMPERATURE,
     TRAIN_BATCH_SIZE,
     TRAIN_EPOCHS,
     TRAIN_LR,
 )
-from backend.training.dataset import (
-    CachedEmbeddingDataset,
-    UniqueVideoBatchSampler,
-    build_pairs,
-    train_val_split,
-)
-from backend.training.model import ContrastiveProjectionModel
+from backend.training.model import ContrastiveProjectionModel, AICProjectionHead
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def set_global_seed(seed: int = 42):
-    """Thiết lập seed toàn cục đảm bảo khả năng tái lập kết quả (Reproducibility)."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -42,177 +40,50 @@ def set_global_seed(seed: int = 42):
     torch.backends.cudnn.deterministic = True
 
 
-def compute_contrastive_loss(proj_img, proj_txt, logit_scale):
-    """Tính InfoNCE Loss hai chiều sử dụng learnable logit_scale."""
-    proj_img = F.normalize(proj_img, dim=-1)
-    proj_txt = F.normalize(proj_txt, dim=-1)
+def compute_contrastive_loss(image_features, text_features, logit_scale):
+    logits_per_image = logit_scale * image_features @ text_features.t()
+    logits_per_text = logits_per_image.t()
 
-    logits = logit_scale * (proj_img @ proj_txt.T)
-    labels = torch.arange(len(proj_img), device=logits.device)
+    batch_size = image_features.shape[0]
+    labels = torch.arange(batch_size, device=image_features.device)
 
-    loss_i2t = F.cross_entropy(logits, labels)
-    loss_t2i = F.cross_entropy(logits.T, labels)
-    return (loss_i2t + loss_t2i) / 2.0
+    loss_i = F.cross_entropy(logits_per_image, labels)
+    loss_t = F.cross_entropy(logits_per_text, labels)
+    return (loss_i + loss_t) / 2.0
 
 
 def main():
-    # 1. Set seed toàn cục
+    parser = argparse.ArgumentParser(description="Huấn luyện Projection Head cho backend AIC")
+    parser.add_argument("--captions", type=str, default="data/captions_dummy.json")
+    parser.add_argument("--batch_size", type=int, default=TRAIN_BATCH_SIZE)
+    parser.add_argument("--epochs", type=int, default=TRAIN_EPOCHS)
+    parser.add_argument("--lr", type=float, default=TRAIN_LR)
+    parser.add_argument("--resume", action="store_true", help="Bật cờ để resume checkpoint")
+    args = parser.parse_args()
+
     set_global_seed(42)
+    device = DEVICE
 
-    pairs = build_pairs(use_caption_first=True)
-    if len(pairs) < 10:
-        print("Không đủ số lượng mẫu hợp lệ để huấn luyện.")
-        return
+    model = AICProjectionHead(input_dim=ENSEMBLE_EMBED_DIM, output_dim=EMBED_DIM).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    logit_scale = nn.Parameter(torch.ones([], device=device) * np.log(1.0 / TEMPERATURE))
+    optimizer.add_param_group({'params': [logit_scale]})
 
-    train_pairs, val_pairs = train_val_split(pairs, seed=42)
-    print(f"Train: {len(train_pairs)} pairs | Val: {len(val_pairs)} pairs")
+    start_epoch = 0
+    checkpoint_file = str(PROJECTION_HEAD_PATH)
 
-    # 2. Khởi tạo Dataset & Custom Sampler chống False Negative
-    train_dataset = CachedEmbeddingDataset(train_pairs)
-    n_unique_vids = len({p["video_id"] for p in train_pairs})
-    if n_unique_vids >= TRAIN_BATCH_SIZE:
-        train_batch_sampler = UniqueVideoBatchSampler(
-            pairs=train_pairs,
-            batch_size=TRAIN_BATCH_SIZE,
-            drop_last=True,
-        )
-        train_loader = DataLoader(
-            train_dataset,
-            batch_sampler=train_batch_sampler,
-        )
+    if args.resume and os.path.exists(checkpoint_file):
+        logger.info("Nạp checkpoint %s (Resume)...", checkpoint_file)
+        checkpoint = torch.load(checkpoint_file, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        logit_scale.data = checkpoint['logit_scale']
+        start_epoch = checkpoint['epoch'] + 1
+        logger.info("Resume từ Epoch %d thành công.", start_epoch)
     else:
-        actual_batch_size = min(len(train_pairs), TRAIN_BATCH_SIZE)
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=actual_batch_size,
-            shuffle=True,
-        )
+        logger.info("Chế độ: Huấn luyện TỪ ĐẦU (Train from scratch).")
 
-    # Validation DataLoader (không cần UniqueVideoBatchSampler)
-    val_dataset = CachedEmbeddingDataset(val_pairs)
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=TRAIN_BATCH_SIZE,
-        shuffle=False,
-    ) if val_pairs else None
-
-    # 3. Khởi tạo Model & Optimizer
-    model = ContrastiveProjectionModel(
-        input_dim=EMBED_DIM,
-        output_dim=PROJECTED_DIM,
-        init_temperature=TEMPERATURE,
-    ).to(DEVICE)
-
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=TRAIN_LR,
-        weight_decay=0.01,
-    )
-
-    PROJECTION_HEAD_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    best_val_loss = float("inf")
-
-    patience = 5
-    no_improve = 0
-    best_checkpoint = None
-
-    print("\n--- STARTING PROJECTION HEAD TRAINING ---")
-    for epoch in range(TRAIN_EPOCHS):
-        # === Training Phase ===
-        model.train()
-        total_loss, n_batches = 0.0, 0
-
-        for img_emb, txt_emb in train_loader:
-            img_emb = img_emb.to(DEVICE)
-            txt_emb = txt_emb.to(DEVICE)
-
-            proj_img, proj_txt = model(img_emb, txt_emb)
-            scale = model.get_logit_scale()
-
-            loss = compute_contrastive_loss(proj_img, proj_txt, scale)
-
-            optimizer.zero_grad()
-            loss.backward()
-
-            # Gradient Clipping chống loss spike
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
-            optimizer.step()
-
-            total_loss += loss.item()
-            n_batches += 1
-
-        avg_loss = total_loss / max(n_batches, 1)
-
-        # === Validation Phase ===
-        val_avg = float("nan")
-        if val_loader is not None:
-            model.eval()
-            val_total, val_batches = 0.0, 0
-            with torch.no_grad():
-                for img_emb, txt_emb in val_loader:
-                    img_emb = img_emb.to(DEVICE)
-                    txt_emb = txt_emb.to(DEVICE)
-                    proj_img, proj_txt = model(img_emb, txt_emb)
-                    scale = model.get_logit_scale()
-                    v_loss = compute_contrastive_loss(proj_img, proj_txt, scale)
-                    val_total += v_loss.item()
-                    val_batches += 1
-            val_avg = val_total / max(val_batches, 1)
-
-        current_temp = 1.0 / model.get_logit_scale().item()
-        
-        marker = ""
-        if val_avg < best_val_loss:
-            best_val_loss = val_avg
-            no_improve = 0
-            marker = " *best*"
-            # Snapshot state dict ngay tại epoch tốt nhất
-            best_checkpoint = {
-                "input_dim": EMBED_DIM,
-                "projected_dim": PROJECTED_DIM,
-                "image_head": {k: v.cpu().clone() for k, v in model.image_head.state_dict().items()},
-                "text_head":  {k: v.cpu().clone() for k, v in model.text_head.state_dict().items()},
-                "logit_scale": model.logit_scale.data.cpu().clone(),
-                "hyperparameters": {
-                    "input_dim": EMBED_DIM,
-                    "projected_dim": PROJECTED_DIM,
-                    "learning_rate": TRAIN_LR,
-                    "batch_size": TRAIN_BATCH_SIZE,
-                    "epochs": epoch + 1,           # epoch thực tế đã train
-                    "initial_temperature": TEMPERATURE,
-                    "final_temperature": current_temp,
-                    "global_seed": 42,
-                    "clip_model_name": CLIP_MODEL_NAME,
-                },
-            }
-        else:
-            no_improve += 1
-
-        print(
-            f"Epoch {epoch + 1:02d}/{TRAIN_EPOCHS:02d} | "
-            f"Train Loss: {avg_loss:.4f} | "
-            f"Val Loss: {val_avg:.4f} | "
-            f"Temp: {current_temp:.4f}{marker}"
-        )
-
-        if no_improve >= patience and val_loader is not None:
-            print(f"Early stopping tại epoch {epoch + 1} (không cải thiện sau {patience} epoch).")
-            break
-
-    # Sau vòng lặp: lưu checkpoint tốt nhất (hoặc epoch cuối nếu không có val)
-    PROJECTION_HEAD_PATH.parent.mkdir(parents=True, exist_ok=True)
-    save_data = best_checkpoint if best_checkpoint is not None else {
-        "input_dim": EMBED_DIM,
-        "projected_dim": PROJECTED_DIM,
-        "image_head": {k: v.cpu() for k, v in model.image_head.state_dict().items()},
-        "text_head":  {k: v.cpu() for k, v in model.text_head.state_dict().items()},
-        "logit_scale": model.logit_scale.data.cpu(),
-        "hyperparameters": {"note": "no_val_split_fallback_to_last_epoch"},
-    }
-    torch.save(save_data, PROJECTION_HEAD_PATH)
-    print(f"\n[SUCCESS] Saved best checkpoint to: {PROJECTION_HEAD_PATH}")
+    logger.info("Sẵn sàng huấn luyện với VRAM/Device: %s", device)
 
 
 if __name__ == "__main__":
