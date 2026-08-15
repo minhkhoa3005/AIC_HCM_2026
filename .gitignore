@@ -37,14 +37,13 @@ Thumbs.db
 *.mkv
 
 # Existing local notes/docs only
-10daysAIC.md
-Day1.txt
-Day2.txt
 test.txt
 testlist.txt
+new_pipeline.txt
 llm_day1_schema_interface.md
 llm_day2_intent_classifier.md
 NOTE AIC Buổi 2.txt
 NOTE AIC Buổi 3.txt
 NOTE TẬP HUẤN AI CHALLENGE 2026 - LẦN 1.md
 llm_clip_integration_notes.md
+plan.md
