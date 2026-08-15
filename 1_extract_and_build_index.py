@@ -228,9 +228,12 @@ def step3_query(index, metadata, query_text: str = "một bức ảnh về cái 
         text_feat = model_clip.encode_text(text_tokens)
         text_feat = (text_feat / text_feat.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0) # [768]
         
-    # Vì FAISS Index sẽ được rebuild xuống 768d (ở Bước 3)
-    # Ta có thể truyền thẳng vector chữ 768d của CLIP vào FAISS
-    query_super = text_feat.astype(np.float32)
+    # Vì FAISS Index đang là 2304d, ta phải nhồi thêm số 0 vào sau vector chữ 768d
+    pad_dim = index.d - text_feat.shape[0]
+    if pad_dim > 0:
+        query_super = np.concatenate([text_feat, np.zeros(pad_dim, dtype=np.float32)])
+    else:
+        query_super = text_feat.astype(np.float32)
         
     # Query FAISS
     query_super = query_super.reshape(1, -1)
@@ -419,7 +422,7 @@ def step4_temporal_query(index, metadata, temporal_query_text: str = "một ngư
 
 
 def main():
-    limit = 0  # Đặt bằng 0 để chạy toàn bộ dataset
+    limit = 10  # Đặt bằng 0 để chạy toàn bộ dataset
     
     logger.info("=== HỆ THỐNG SEARCH AIC 2026 (ENSEMBLE ZERO-SHOT) ===")
 
