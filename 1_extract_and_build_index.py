@@ -248,7 +248,7 @@ def step3_query(index, metadata, query_text: str = "một bức ảnh về cái 
     md_content = f"# Kết quả Tìm Kiếm bằng Ensemble + FAISS\n\n"
     md_content += f"- **Câu truy vấn (Vi)**: `{query_text}`\n"
     md_content += f"- **Bản dịch (En)**: `{query_en}`\n"
-    md_content += f"- **Tổng số chiều vector**: `{target_dim}d`\n\n"
+    md_content += f"- **Tổng số chiều vector**: `{index.d}d`\n\n"
     md_content += f"| Top | Score | Tựa đề Video (Dịch Vi) | Frame ID | Thời gian | Hình ảnh |\n"
     md_content += f"| :---: | :---: | :---: | :---: | :---: | :---: |\n"
 
@@ -422,7 +422,7 @@ def step4_temporal_query(index, metadata, temporal_query_text: str = "một ngư
 
 
 def main():
-    limit = 10  # Đặt bằng 0 để chạy toàn bộ dataset
+    limit = 0  # Đặt bằng 0 để chạy toàn bộ dataset
     
     logger.info("=== HỆ THỐNG SEARCH AIC 2026 (ENSEMBLE ZERO-SHOT) ===")
 

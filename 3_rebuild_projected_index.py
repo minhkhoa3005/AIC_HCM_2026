@@ -72,7 +72,7 @@ def main():
                 # Load model now that we know the dimension
                 model = AICProjectionHead(input_dim=dim).to(DEVICE)
                 ckpt_path = PROJECTION_HEAD_PATH if PROJECTION_HEAD_PATH.exists() else "projection_head_latest.pth"
-                checkpoint = torch.load(ckpt_path, map_location=DEVICE)
+                checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=False)
                 model.load_state_dict(checkpoint['model_state_dict'])
                 model.eval()
                 logger.info("Đã nạp Projection Head thành công.")
