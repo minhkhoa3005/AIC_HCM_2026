@@ -160,7 +160,7 @@ def _feature_candidates(video_id: str, frame_name: str) -> list[Path]:
 
 
 def _load_individual_feature(item: dict) -> np.ndarray | None:
-    frame_name = Path(item["path"]).stem
+    frame_name = resolve_path(item.get("path", "")).stem
     for path in _feature_candidates(item["video_id"], frame_name):
         if not path.exists():
             continue

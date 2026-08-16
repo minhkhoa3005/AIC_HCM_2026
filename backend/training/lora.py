@@ -132,6 +132,10 @@ def inject_lora(
     injected_count = 0
 
     for name, module in list(model.named_modules()):
+        # Bỏ qua toàn bộ Image Encoder để giữ nguyên vector 512d chuẩn
+        if "visual" in name:
+            continue
+            
         # Chỉ inject vào nn.Linear nằm trong target_modules
         if not isinstance(module, nn.Linear):
             continue

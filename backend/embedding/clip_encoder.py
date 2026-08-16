@@ -14,13 +14,10 @@ from backend.config import (
     LORA_ALPHA,
     LORA_RANK,
     LORA_WEIGHTS_PATH,
-    PROJECTED_DIM,
-    PROJECTION_HEAD_PATH,
     TEXT_EMBED_WEIGHT,
     USE_LORA,
     VISUAL_EMBED_WEIGHT,
 )
-from backend.training.model import ProjectionHead
 
 
 @lru_cache(maxsize=1)
@@ -47,24 +44,6 @@ def _load_clip():
         )
 
     return model, preprocess
-
-
-@lru_cache(maxsize=1)
-def _load_projection_heads():
-    if not Path(PROJECTION_HEAD_PATH).exists():
-        return None, None
-
-    ckpt = torch.load(PROJECTION_HEAD_PATH, map_location=DEVICE, weights_only=False)
-    input_dim = ckpt.get("input_dim") or ckpt.get("hyperparameters", {}).get("input_dim", 512)
-    projected_dim = ckpt.get("projected_dim") or ckpt.get("hyperparameters", {}).get("projected_dim", PROJECTED_DIM)
-    image_head = ProjectionHead(input_dim, projected_dim).to(DEVICE)
-    text_head = ProjectionHead(input_dim, projected_dim).to(DEVICE)
-    image_head.load_state_dict(ckpt["image_head"])
-    text_head.load_state_dict(ckpt["text_head"])
-    image_head.eval()
-    text_head.eval()
-    return image_head, text_head
-
 
 
 def _normalize(vec: np.ndarray) -> np.ndarray:
@@ -151,9 +130,9 @@ def translate_vi_to_en(text: str) -> str:
 
 
 def encode_text(text: str, translate: bool = True) -> np.ndarray:
+    """Encode text qua CLIP."""
     import clip
     model, _ = _load_clip()
-    _, text_head = _load_projection_heads()
     
     if translate:
         text = translate_vi_to_en(text)
@@ -162,63 +141,17 @@ def encode_text(text: str, translate: bool = True) -> np.ndarray:
     tok = clip.tokenize([text], truncate=True).to(DEVICE)
     with torch.no_grad():
         emb = model.encode_text(tok).float()
-        if text_head is not None:
-            emb = text_head(emb)
     return _normalize(emb.cpu().numpy())[0]
 
 
 def encode_texts(texts: list[str], batch_size: int = 64) -> list[np.ndarray]:
-    """Mã hoá hàng loạt chuỗi văn bản theo batch, CÓ áp dụng Projection Head (nếu đã fine-tune)."""
+    """Mã hoá hàng loạt chuỗi văn bản theo batch."""
     if not texts:
         return []
 
     import clip
     model, _ = _load_clip()
-    _, text_head = _load_projection_heads()
     
-    results = []
-    for i in range(0, len(texts), batch_size):
-        chunk = [t.strip() or "empty video segment" for t in texts[i : i + batch_size]]
-        tok = clip.tokenize(chunk, truncate=True).to(DEVICE)
-        with torch.no_grad():
-            emb = model.encode_text(tok).float()
-            if text_head is not None:
-                emb = text_head(emb)
-            normed = _normalize(emb.cpu().numpy())
-            results.extend(normed)
-    return results
-
-
-def encode_text_raw(text: str, translate: bool = True) -> np.ndarray:
-    """Encode text qua CLIP ONLY, KHÔNG áp dụng Projection Head.
-
-    Dùng cho training data preparation hoặc search raw.
-    """
-    import clip
-
-    model, _ = _load_clip()
-    
-    if translate:
-        text = translate_vi_to_en(text)
-        
-    text = text.strip() or "empty video segment"
-    tok = clip.tokenize([text], truncate=True).to(DEVICE)
-    with torch.no_grad():
-        emb = model.encode_text(tok).float()
-    return _normalize(emb.cpu().numpy())[0]
-
-
-def encode_texts_raw(texts: list[str], batch_size: int = 64) -> list[np.ndarray]:
-    """Mã hoá hàng loạt chuỗi văn bản theo batch (CLIP ONLY, no projection head).
-
-    Tăng tốc độ encoding từ 1-2 phút xuống chỉ còn 2-3 giây.
-    """
-    if not texts:
-        return []
-
-    import clip
-
-    model, _ = _load_clip()
     results = []
     for i in range(0, len(texts), batch_size):
         chunk = [t.strip() or "empty video segment" for t in texts[i : i + batch_size]]
@@ -228,6 +161,10 @@ def encode_texts_raw(texts: list[str], batch_size: int = 64) -> list[np.ndarray]
             normed = _normalize(emb.cpu().numpy())
             results.extend(normed)
     return results
+
+# Giữ lại alias cho backward compatibility
+encode_text_raw = encode_text
+encode_texts_raw = encode_texts
 
 
 def fuse_embeddings(

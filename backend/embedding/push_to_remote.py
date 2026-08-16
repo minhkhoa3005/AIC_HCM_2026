@@ -34,13 +34,20 @@ from backend.config import (  # noqa: E402
     METADATA_PATH,
     PROJECTED_DIM,
     PROJECTION_HEAD_PATH,
+    QDRANT_API_KEY,
     QDRANT_COLLECTION_NAME,
+    QDRANT_HOST,
+    QDRANT_PORT,
+    QDRANT_PREFER_GRPC,
+    QDRANT_URL,
+    USE_REMOTE_VECTOR_DB,
+    VECTOR_DB_TYPE,
+    resolve_path,
 )
 from backend.embedding.remote_index import (  # noqa: E402
     init_remote_collection,
     upsert_vectors_remote,
 )
-from backend.training.model import ProjectionHead  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -161,7 +168,7 @@ def _load_features_for_remote(items: list[dict]) -> tuple[list[dict], np.ndarray
 
             # Priority 2: per-frame .npy
             if vec is None:
-                frame_name = Path(item.get("path", "")).stem
+                frame_name = resolve_path(item.get("path", "")).stem
                 for path in _feature_candidates(video_id, frame_name):
                     if path.exists():
                         try:
@@ -189,29 +196,12 @@ def _load_features_for_remote(items: list[dict]) -> tuple[list[dict], np.ndarray
     return kept_items, matrix
 
 
-def _load_projection_head() -> tuple:
-    """Load Projection Head image_head từ checkpoint (nếu có)."""
-    if not PROJECTION_HEAD_PATH.exists():
-        return None, 0
-
-    ckpt = torch.load(PROJECTION_HEAD_PATH, map_location=DEVICE, weights_only=False)
-    input_dim = ckpt.get("input_dim") or ckpt.get("hyperparameters", {}).get("input_dim", EMBED_DIM)
-    projected_dim = ckpt.get("projected_dim") or ckpt.get("hyperparameters", {}).get("projected_dim", PROJECTED_DIM)
-    image_head = ProjectionHead(input_dim, projected_dim).to(DEVICE)
-    image_head.load_state_dict(ckpt["image_head"])
-    image_head.eval()
-    return image_head, projected_dim
-
 
 def main():
     parser = argparse.ArgumentParser(description="Push BTC CLIP features to Remote Vector DB (Qdrant)")
     parser.add_argument("--collection", type=str, default=QDRANT_COLLECTION_NAME, help="Qdrant collection name")
     parser.add_argument("--recreate", action="store_true", help="Delete and recreate collection from scratch")
-    parser.add_argument(
-        "--projected", action="store_true",
-        help="Apply Projection Head (image_head) before push. "
-             "Output vectors will be projected dim (default: push raw CLIP 512d)",
-    )
+
     parser.add_argument("--batch-size", type=int, default=100, help="Batch size for upsert")
     args = parser.parse_args()
 
@@ -235,23 +225,8 @@ def main():
         logger.error("Không load được feature vector nào. Kiểm tra %s.", BTC_CLIP_FEATURES_DIR)
         return
 
-    # 3. Optionally project qua Projection Head
-    if args.projected:
-        image_head, projected_dim = _load_projection_head()
-        if image_head is None:
-            logger.error("--projected flag được bật nhưng không tìm thấy checkpoint tại %s", PROJECTION_HEAD_PATH)
-            return
-        logger.info("Áp dụng Projection Head: %dd → %dd", matrix.shape[1], projected_dim)
-        with torch.no_grad():
-            tensor = torch.from_numpy(matrix).to(DEVICE)
-            projected = image_head(tensor).cpu().numpy()
-        matrix = projected.astype("float32")
-        # Normalize lại sau projection
-        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-        matrix = matrix / np.clip(norms, 1e-8, None)
-        logger.info("Projected vectors shape: %s", matrix.shape)
-    else:
-        logger.info("Push raw CLIP features (dim=%d) — không áp dụng Projection Head.", matrix.shape[1])
+    # 3. Sử dụng raw CLIP features
+    logger.info("Push raw CLIP features (dim=%d)", matrix.shape[1])
 
     # 4. Prepare payload cho Qdrant
     enriched_items = []
@@ -287,10 +262,7 @@ def main():
     )
 
     logger.info("THÀNH CÔNG: Đã push %d vectors lên Qdrant collection '%s'.", count, args.collection)
-    if args.projected:
-        logger.info("⚠ Vector space: PROJECTED (%dd). Search query cần dùng encode_text() (có Projection Head).", vector_dim)
-    else:
-        logger.info("ℹ Vector space: RAW CLIP (%dd). Search query dùng encode_text_raw() hoặc encode_text() nếu chưa có Projection Head.", vector_dim)
+    logger.info("ℹ Vector space: RAW CLIP (%dd). Search query dùng encode_text_raw().", vector_dim)
 
 
 if __name__ == "__main__":

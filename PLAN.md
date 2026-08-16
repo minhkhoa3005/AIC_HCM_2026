@@ -11,7 +11,7 @@ Xây dựng hệ thống tìm kiếm khoảnh khắc video có thể nộp đáp
 - [x] Trích xuất lời thoại âm thanh bằng Faster-Whisper (`transcribe.py`).
 - [x] Fine-tune CLIP backbone bằng **LoRA (Low-Rank Adaptation)** chống Catastrophic Forgetting (`lora.py`, `train_lora_clip.py`).
 - [x] Cấu hình linh hoạt GPU/CPU qua cờ `--device` và file `.env`.
-- [x] Đẩy vector và metadata lên Remote Qdrant Vector DB (`push_to_remote.py`).
+- [x] Đẩy vector và metadata vào FAISS Local Index.
 - [x] Trích xuất hình ảnh keyframe kết quả tìm kiếm kèm xuất báo cáo Markdown trực quan.
 
 ## Kế Hoạch Tiếp Theo

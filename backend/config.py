@@ -33,7 +33,6 @@ FAISS_INDEX_PATH = INDEX_DIR / "video.index"
 SCENE_FAISS_INDEX_PATH = INDEX_DIR / "scene.index"
 FAISS_METADATA_PATH = INDEX_DIR / "index_metadata.json"
 SCENE_METADATA_PATH = INDEX_DIR / "scene_metadata.json"
-PROJECTION_HEAD_PATH = INDEX_DIR / "projection_head.pt"
 TRAIN_PAIRS_PATH = INDEX_DIR / "train_pairs.jsonl"
 
 # LoRA Fine-tune
@@ -77,7 +76,6 @@ def _get_default_device():
 DEVICE = _get_default_device()
 TEMPORAL_CHECKPOINT_PATH = INDEX_DIR / "temporal_encoder.pt"
 EMBED_DIM = 512
-PROJECTED_DIM = 256
 KEYFRAME_POSITIONS = (0.25, 0.5, 0.75)
 TEXT_EMBED_WEIGHT = 0.65
 VISUAL_EMBED_WEIGHT = 0.35
@@ -93,7 +91,6 @@ SMART_CUT_MAX_SCENE_KEYFRAMES = 30
 TRAIN_BATCH_SIZE = 32
 TRAIN_EPOCHS = 8
 TRAIN_LR = 1e-4
-TEMPERATURE = 0.07
 VAL_SPLIT_RATIO = 0.2
 
 # API / Search Parameters
@@ -114,3 +111,12 @@ QDRANT_URL = os.getenv("QDRANT_URL", None)
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", None)
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "aic2026_keyframes")
 QDRANT_PREFER_GRPC = os.getenv("QDRANT_PREFER_GRPC", "false").lower() in ("true", "1", "yes")
+
+def resolve_path(p: str) -> Path:
+    """Chuyển đổi đường dẫn (tương đối/tuyệt đối) về dạng Path chuẩn theo ROOT_DIR."""
+    if not p:
+        return Path("")
+    path_obj = Path(p)
+    if path_obj.is_absolute():
+        return path_obj
+    return (ROOT_DIR / path_obj).resolve()

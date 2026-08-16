@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from torch.utils.data import BatchSampler, Dataset
 
-from backend.config import BTC_CLIP_FEATURES_DIR, METADATA_PATH, VAL_SPLIT_RATIO
+from backend.config import BTC_CLIP_FEATURES_DIR, METADATA_PATH, VAL_SPLIT_RATIO, resolve_path
 from backend.embedding.clip_encoder import encode_text_raw, encode_texts_raw
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -135,7 +135,7 @@ def build_pairs(use_caption_first: bool = True) -> List[Dict]:
 
     for item in items:
         video_id = item["video_id"]
-        frame_stem = Path(item.get("path", "")).stem
+        frame_stem = resolve_path(item.get("path", "")).stem
         ordinal = item.get("keyframe_ordinal")
 
         img_emb = _load_keyframe_feature(video_id, frame_stem, ordinal)
@@ -151,7 +151,7 @@ def build_pairs(use_caption_first: bool = True) -> List[Dict]:
         if not text:
             continue
 
-        raw_candidates.append((video_id, item.get("path", f"{video_id}/{frame_stem}"), text, img_emb))
+        raw_candidates.append((video_id, str(resolve_path(item.get("path", ""))), text, img_emb))
         unique_texts.add(text)
 
     # Mã hóa theo batch tất cả các chuỗi text duy nhất (tăng tốc độ gấp 50 lần)

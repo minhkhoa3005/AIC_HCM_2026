@@ -32,6 +32,7 @@ from backend.config import (
     QDRANT_HOST,
     QDRANT_PORT,
     USE_REMOTE_VECTOR_DB,
+    resolve_path,
 )
 from backend.embedding.clip_encoder import encode_image, encode_text_raw
 from backend.training.lora import (
@@ -111,75 +112,102 @@ def step1_train_lora(device=None, limit: int = 1000, epochs: int = 3, batch_size
     return model, preprocess, device
 
 
-def step2_extract_features(model, preprocess, device: str, limit: int = 1000):
+from torch.utils.data import Dataset, DataLoader
+import cv2
+from tqdm import tqdm
+
+class KeyframeDataset(Dataset):
+    def __init__(self, paths, preprocess):
+        self.paths = paths
+        self.preprocess = preprocess
+        
+    def __len__(self):
+        return len(self.paths)
+        
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        try:
+            from PIL import Image
+            img = Image.open(str(path)).convert("RGB")
+            img_t = self.preprocess(img)
+            return img_t, str(path), True
+        except Exception:
+            return torch.zeros((3, 224, 224)), str(path), False
+
+def step2_extract_features(model, preprocess, device: str, limit: int = 0):
     """Bước 2: Trích xuất vector đặc trưng bằng LoRA-CLIP."""
     logger.info("=== BƯỚC 2: TRÍCH XUẤT VECTOR BẰNG LORA-CLIP ===")
-    items = []
-    with open(METADATA_PATH, encoding="utf-8") as f:
-        for i, line in enumerate(f):
-            if limit > 0 and i >= limit:
-                break
-            if line.strip():
-                items.append(json.loads(line))
 
+    if not KEYFRAMES_DIR.exists():
+        logger.error("Thư mục keyframes không tồn tại: %s", KEYFRAMES_DIR)
+        return
+
+    image_paths = sorted(KEYFRAMES_DIR.rglob("*.jpg"))
+    if limit > 0:
+        image_paths = image_paths[:limit]
+
+    if not image_paths:
+        logger.warning("Không tìm thấy file .jpg nào trong %s", KEYFRAMES_DIR)
+        return
+
+    paths_to_process = []
+    for img_path in image_paths:
+        video_id = img_path.parent.name
+        frame_stem = img_path.stem
+        save_path = BTC_CLIP_FEATURES_DIR / video_id / f"{frame_stem}.npy"
+        if not save_path.exists():
+            paths_to_process.append(img_path)
+
+    if not paths_to_process:
+        logger.info("Tất cả %d keyframes đã được trích xuất (resume success).", len(image_paths))
+        return
+
+    logger.info("Cần trích xuất đặc trưng cho %d keyframes mới...", len(paths_to_process))
     model.eval()
+    
+    dataset = KeyframeDataset(paths_to_process, preprocess)
+    dataloader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=0, pin_memory=True)
+    
     extracted_count = 0
     with torch.no_grad():
-        for item in items:
-            img_path = Path(item["path"])
-            if not img_path.exists():
-                continue
-
-            try:
-                img = Image.open(img_path).convert("RGB")
-                img_t = preprocess(img).unsqueeze(0).to(device)
-                feat = model.encode_image(img_t)
-                feat = (feat / feat.norm(dim=-1, keepdim=True)).cpu().numpy().squeeze(0)
-
-                video_id = item["video_id"]
-                frame_stem = img_path.stem
-                batch_name = video_id.split("_")[0]
-
-                out_dir = BTC_CLIP_FEATURES_DIR / batch_name / video_id
-                out_dir.mkdir(parents=True, exist_ok=True)
-                np.save(out_dir / f"{frame_stem}.npy", feat)
-                extracted_count += 1
-            except Exception as e:
-                logger.warning("Lỗi trích xuất %s: %s", img_path, e)
+        with tqdm(total=len(paths_to_process), desc="Extracting Features") as pbar:
+            for imgs, paths, valids in dataloader:
+                valid_mask = valids.numpy()
+                if not valid_mask.any():
+                    pbar.update(len(paths))
+                    continue
+                
+                valid_imgs = imgs[valids].to(device)
+                feat = model.encode_image(valid_imgs).float()
+                feat = feat / feat.norm(dim=-1, keepdim=True)
+                embs = feat.cpu().numpy()
+                
+                emb_idx = 0
+                for i, path_str in enumerate(paths):
+                    if valids[i]:
+                        img_path = Path(path_str)
+                        video_id = img_path.parent.name
+                        frame_stem = img_path.stem
+                        
+                        out_dir = BTC_CLIP_FEATURES_DIR / video_id
+                        out_dir.mkdir(parents=True, exist_ok=True)
+                        save_path = out_dir / f"{frame_stem}.npy"
+                        
+                        np.save(save_path, embs[emb_idx])
+                        emb_idx += 1
+                        extracted_count += 1
+                
+                pbar.update(len(paths))
 
     logger.info("Đã trích xuất %d vectors đặc trưng mới.", extracted_count)
 
 
-def step3_push_to_qdrant(limit: int = 1000):
-    """Bước 3: Đẩy vectors và metadata lên Qdrant Database."""
-    logger.info("=== BƯỚC 3: ĐẨY VECTORS LÊN QDRANT DATABASE ===")
-    from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
-    from backend.config import INDEX_DIR, QDRANT_URL, QDRANT_API_KEY
 
-    try:
-        if QDRANT_URL:
-            client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
-        else:
-            client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, timeout=3.0)
-            client.get_collections()
-        logger.info("Kết nối tới Qdrant Server thành công.")
-    except Exception as e:
-        qdrant_db_path = str(INDEX_DIR / "qdrant_db")
-        logger.warning("Không thể kết nối Qdrant Daemon (%s). Chuyển sang Qdrant Local Storage tại '%s'...", e, qdrant_db_path)
-        client = QdrantClient(path=qdrant_db_path)
-
-    # Recreate collection
-    try:
-        if client.collection_exists(collection_name=QDRANT_COLLECTION_NAME):
-            client.delete_collection(collection_name=QDRANT_COLLECTION_NAME)
-        client.create_collection(
-            collection_name=QDRANT_COLLECTION_NAME,
-            vectors_config=VectorParams(size=512, distance=Distance.COSINE),
-        )
-        logger.info("Tạo mới Qdrant collection: %s", QDRANT_COLLECTION_NAME)
-    except Exception as e:
-        logger.warning("Thử tạo collection: %s", e)
+def step3_build_faiss_index(limit: int = 1000):
+    """Bước 3: Xây dựng FAISS Index Local."""
+    logger.info("=== BƯỚC 3: XÂY DỰNG FAISS INDEX LOCAL ===")
+    import faiss
+    from backend.config import INDEX_DIR, FAISS_INDEX_PATH, FAISS_METADATA_PATH
 
     items = []
     with open(METADATA_PATH, encoding="utf-8") as f:
@@ -189,16 +217,26 @@ def step3_push_to_qdrant(limit: int = 1000):
             if line.strip():
                 items.append(json.loads(line))
 
-    points = []
-    for idx, item in enumerate(items):
-        video_id = item["video_id"]
-        frame_stem = Path(item["path"]).stem
-        batch_name = video_id.split("_")[0]
-        feat_path = BTC_CLIP_FEATURES_DIR / batch_name / video_id / f"{frame_stem}.npy"
+    vectors = []
+    metadata = []
+    dim = 512
 
-        if feat_path.exists():
-            vec = np.load(feat_path).tolist()
+    def load_feat(item_and_idx):
+        idx, item = item_and_idx
+        video_id = item["video_id"]
+        frame_stem = resolve_path(item.get("path", "")).stem
+        batch_name = video_id.split("_")[0]
+        
+        candidates = [
+            BTC_CLIP_FEATURES_DIR / batch_name / video_id / f"{frame_stem}.npy",
+            BTC_CLIP_FEATURES_DIR / video_id / f"{frame_stem}.npy"
+        ]
+        
+        feat_path = next((p for p in candidates if p.exists()), None)
+        if feat_path:
+            vec = np.load(feat_path)
             payload = {
+                "id": idx,
                 "video_id": video_id,
                 "frame_id": item.get("frame_id", 0),
                 "pts_time": item.get("pts_time", 0.0),
@@ -206,73 +244,155 @@ def step3_push_to_qdrant(limit: int = 1000):
                 "caption": item.get("caption", ""),
                 "text": item.get("text", ""),
             }
-            points.append(PointStruct(id=idx + 1, vector=vec, payload=payload))
+            return vec, payload
+        return None, None
 
-    if points:
-        client.upsert(collection_name=QDRANT_COLLECTION_NAME, points=points)
-        logger.info("Đã đẩy %d vectors lên Qdrant thành công!", len(points))
-    return client
+    import concurrent.futures
+    logger.info("Nạp %d features bằng đa luồng...", len(items))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+        results = list(executor.map(load_feat, enumerate(items)))
+
+    for vec, payload in results:
+        if vec is not None:
+            vectors.append(vec)
+            metadata.append(payload)
+
+    if not vectors:
+        logger.warning("Không tìm thấy vector nào để đưa vào FAISS.")
+        return None, None
+
+    vectors_np = np.vstack(vectors).astype(np.float32)
+    faiss.normalize_L2(vectors_np)
+    
+    index = faiss.IndexFlatIP(dim)
+    index.add(vectors_np)
+    
+    faiss.write_index(index, str(FAISS_INDEX_PATH))
+    with open(FAISS_METADATA_PATH, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
+        
+    logger.info("Đã xây dựng xong FAISS Index (%d chiều) với %d keyframes.", dim, len(metadata))
+    return index, metadata
 
 
-def step4_query_and_generate_artifact(client, query_text: str = "a photo of a tree"):
-    """Bước 4: Truy vấn tìm kiếm, trích xuất ảnh và tạo báo cáo Markdown."""
-    logger.info("=== BƯỚC 4: TRUY VẤN TÌM KIẾM & XUẤT BÁO CÁO ===")
-    query_vec = encode_text_raw(query_text)
+def step4_query_and_generate_artifact(index, metadata, query_text: str = "a photo of a tree"):
+    """Bước 4: Truy vấn tìm kiếm (MMR & Rocchio & Temporal), trích xuất ảnh và tạo báo cáo Markdown."""
+    logger.info("=== BƯỚC 4: TRUY VẤN TÌM KIẾM (MMR & ROCCHIO & TEMPORAL) & XUẤT BÁO CÁO ===")
+    import faiss
+    from backend.embedding.search_algorithms import mmr_search, rocchio_feedback, temporal_search
+    from backend.embedding.clip_encoder import encode_text_raw, translate_vi_to_en
 
-    try:
-        res = client.query_points(
-            collection_name=QDRANT_COLLECTION_NAME,
-            query=query_vec.tolist(),
-            limit=5,
-        )
-        search_results = res.points
-    except Exception as e:
-        logger.warning("Truy vấn với query_points thất bại (%s), thử lại với API tương thích...", e)
-        search_results = client.scroll(collection_name=QDRANT_COLLECTION_NAME, limit=5)[0]
+    if index is None:
+        logger.error("FAISS Index is None!")
+        return
 
-    artifact_dir = Path("C:/Users/Administrator/.gemini/antigravity-ide/brain/c606a4f6-beb2-4fa0-a0f2-46a8ba7ee5b1")
+    top_k = 5
+    artifact_dir = Path("search_results").resolve()
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    md_content = f"# Kết quả Tìm Kiếm sau khi Fine-tune LoRA CLIP\n\n"
-    md_content += f"- **Query Text**: `{query_text}`\n"
-    md_content += f"- **Vector Dim**: 512d\n"
-    md_content += f"- **Model**: CLIP ViT-B/32 (LoRA-adapted)\n\n"
-    md_content += f"| Rank | Score | Video ID | Frame ID | Timestamp | Ảnh Khoảnh Khắc |\n"
-    md_content += f"| :---: | :---: | :---: | :---: | :---: | :---: |\n"
+    def encode_fn(text):
+        text_en = translate_vi_to_en(text)
+        if text_en != text:
+            logger.info("Translated sub-query: '%s' -> '%s'", text, text_en)
+        query_vec = encode_text_raw(text_en)
+        query_super = query_vec.reshape(1, -1).astype(np.float32)
+        faiss.normalize_L2(query_super)
+        return query_super
 
-    for rank, hit in enumerate(search_results, 1):
-        p = hit.payload
-        vid = p.get("video_id", "N/A")
-        fid = p.get("frame_id", 0)
-        pts = p.get("pts_time", 0.0)
-        img_src_path = Path(p.get("path", ""))
+    # 4.1 Thực hiện tìm kiếm với Temporal Search (Tự động fallback về MMR nếu không có dấu mũi tên)
+    logger.info("Đang thực hiện tìm kiếm Temporal / MMR...")
+    scores_mmr, results_mmr, sub_queries = temporal_search(
+        temporal_query_text=query_text,
+        encode_fn=encode_fn,
+        index=index,
+        metadata=metadata,
+        max_gap_sec=120.0,
+        top_k_candidates=50,
+        top_k=top_k
+    )
 
-        img_artifact_name = f"{vid}_{fid}.jpg"
-        img_artifact_path = artifact_dir / img_artifact_name
+    is_temporal = len(sub_queries) > 1
 
-        if img_src_path.exists():
+    # 4.2 Giả lập Rocchio Feedback (Chỉ áp dụng nếu KHÔNG PHẢI Temporal)
+    scores_rocchio, results_rocchio = scores_mmr, results_mmr
+    if not is_temporal:
+        # Giả sử người dùng phản hồi kết quả đầu tiên là đúng (Positive), kết quả cuối cùng là sai (Negative)
+        logger.info("Đang thực hiện Rocchio Feedback (1 Positive, 1 Negative)...")
+        if len(results_mmr) >= 2:
+            rel_vecs = []
+            non_rel_vecs = []
             try:
-                img = Image.open(img_src_path)
-                img.save(img_artifact_path)
-            except Exception as e:
-                logger.warning("Không thể lưu ảnh artifact: %s", e)
+                rel_vecs.append(index.reconstruct(int(results_mmr[0]['id'])))
+                non_rel_vecs.append(index.reconstruct(int(results_mmr[-1]['id'])))
 
-        md_content += f"| **#{rank:02d}** | `{hit.score:.4f}` | `{vid}` | `{fid}` | `{pts:.1f}s` | ![{vid}_{fid}]({img_artifact_path.as_uri()}) |\n"
+                # Lấy vector query ban đầu
+                original_query = encode_fn(query_text)
+
+                # Cập nhật query (alpha=1.0, beta=0.75, gamma=0.15)
+                new_query = rocchio_feedback(original_query, rel_vecs, non_rel_vecs, alpha=1.0, beta=0.75, gamma=0.15)
+
+                # Thực hiện lại tìm kiếm sau khi cập nhật
+                scores_rocchio, results_rocchio = mmr_search(new_query, index, metadata, top_k=top_k, lambda_mult=0.5, fetch_k=50)
+                logger.info("Đã tìm kiếm lại với vector từ Rocchio Feedback.")
+            except Exception as e:
+                logger.warning("Rocchio feedback gặp lỗi (có thể index không hỗ trợ reconstruct): %s", e)
+
+    def render_table(title, scores, results, is_temp=False):
+        content = f"## {title}\n\n"
+        if is_temp:
+            content += f"| Rank | Score | Video ID | Frame ID | Thời điểm A -> B | Gap (s) | Ảnh Khoảnh Khắc B |\n"
+            content += f"| :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n"
+        else:
+            content += f"| Rank | Score | Video ID | Frame ID | Timestamp | Ảnh Khoảnh Khắc |\n"
+            content += f"| :---: | :---: | :---: | :---: | :---: | :---: |\n"
+        
+        for i, (score, p) in enumerate(zip(scores, results)):
+            vid = p.get('video_id', 'N/A')
+            fid = p.get('frame_id', 0)
+            pts = p.get('pts_time', 0.0)
+            img_src_path = Path(p.get('path', ''))
+            img_artifact_path = artifact_dir / f"{vid}_{fid}.jpg"
+
+            if img_src_path.exists():
+                try:
+                    img = Image.open(img_src_path)
+                    img.save(img_artifact_path)
+                except Exception:
+                    pass
+            
+            if is_temp:
+                gap = p.get('time_gap', 0.0)
+                pts_a = p.get('event_a_pts', 0.0)
+                content += f"| **#{i+1:02d}** | `{score:.4f}` | `{vid}` | `{fid}` | `{pts_a:.1f}s -> {pts:.1f}s` | `{gap:.1f}s` | ![{vid}_{fid}]({img_artifact_path.as_uri()}) |\n"
+            else:
+                content += f"| **#{i+1:02d}** | `{score:.4f}` | `{vid}` | `{fid}` | `{pts:.1f}s` | ![{vid}_{fid}]({img_artifact_path.as_uri()}) |\n"
+        return content
+
+    md_content = f"# Kết quả Tìm Kiếm sau khi Fine-tune LoRA CLIP (Nâng Cao)\n\n"
+    md_content += f"- **Query Text**: `{query_text}`\n"
+    if is_temporal:
+        md_content += f"- **Sub-Queries**: `{'` -> `'.join(sub_queries)}`\n\n"
+        md_content += render_table("1. Tìm kiếm với Temporal Search", scores_mmr, results_mmr, is_temp=True)
+    else:
+        query_en = translate_vi_to_en(query_text)
+        md_content += f"- **Translated**: `{query_en}`\n\n"
+        md_content += render_table("1. Tìm kiếm với MMR (Đa dạng hóa, lambda=0.5)", scores_mmr, results_mmr)
+        md_content += render_table("2. Tìm kiếm với Rocchio Feedback (Sau khi cập nhật Vector)", scores_rocchio, results_rocchio)
 
     md_file = artifact_dir / "search_results.md"
     with open(md_file, "w", encoding="utf-8") as f:
         f.write(md_content)
 
     logger.info("Đã lưu kết quả truy vấn và ảnh báo cáo tại: %s", md_file)
-    print("\n" + md_content)
+    print(f"\n[Success] Advanced Markdown report saved at: {md_file}")
 
 
 def main():
-    train_device = "cpu"  # BẮT BUỘC dùng CPU cho Training trên máy này
+    train_device = DEVICE  # Dùng thiết bị mặc định (GPU/DML) thay vì ép CPU
     gpu_device = DEVICE
-    batch_size = 32
+    batch_size = 4  # Giảm batch_size xuống 4 để tránh tràn RAM GPU AMD
     epochs = 3
-    limit = 1000  # Chỉ dùng 1000 keyframes để test thử nhanh
+    limit = 0  # Chỉ dùng 10 keyframes để test thử nhanh
 
     logger.info("=== HUẤN LUYỆN LORA CLIP FULL L21 (1000 KEYFRAMES) ===")
 
@@ -286,11 +406,19 @@ def main():
     # 2. Trích xuất đặc trưng bằng GPU
     step2_extract_features(model, preprocess, device=gpu_device, limit=limit)
 
-    # 3. Push Qdrant FULL 22,248 keyframe
-    client = step3_push_to_qdrant(limit=limit)
+    # 3. Build FAISS Index
+    index, metadata = step3_build_faiss_index(limit=limit)
 
     # 4. Search & Output Artifact (Score + Images)
-    step4_query_and_generate_artifact(client, query_text="một bức ảnh về cái cây")
+    logger.info("=== BƯỚC 4: THỬ NGHIỆM TÌM KIẾM MẪU ===")
+    queries = [
+        "a photo of a person wearing a red shirt",
+        "car moving on the highway"
+    ]
+    for q in queries:
+        step4_search_and_output(q, index, metadata)
+
+    step4_query_and_generate_artifact(index, metadata, query_text="bản tin thời sự -> buổi sáng")
 
 
 if __name__ == "__main__":

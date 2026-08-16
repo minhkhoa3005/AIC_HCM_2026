@@ -15,8 +15,8 @@ Kiến trúc **keyframe-centric**: trả về `video_id`, `frame_id` và dòng s
    - Tùy chỉnh thiết bị qua dòng lệnh (`--device cuda`, `--device cpu`, `--device cuda:0`) hoặc qua file `.env` (`DEVICE=cuda`).
 3. **Tích Hợp Âm Thanh (Whisper ASR) & Hình Ảnh**:
    - Trích xuất transcript lời thoại từ audio video và gán trực tiếp vào timestamp keyframe.
-4. **Remote Vector DB (Qdrant) & Local FAISS**:
-   - Quản lý và tìm kiếm similarity vector siêu tốc với Qdrant Client hoặc local FAISS.
+4. **Local FAISS Index**:
+   - Quản lý và tìm kiếm similarity vector siêu tốc với local FAISS.
 
 ---
 
@@ -48,7 +48,7 @@ video-search-agent/
 │   ├── config.py                 # Cấu hình trung tâm (ENV, DEVICE, paths)
 │   ├── preprocessing/            # Import metadata, Whisper transcribe, generate captions
 │   ├── training/                 # LoRA module, Projection Head & Temporal GRU
-│   └── embedding/                # CLIP encoder (LoRA-aware), Qdrant push
+│   └── embedding/                # CLIP encoder (LoRA-aware)
 ├── scripts/                      # CLI scripts chạy pipeline & training
 │   ├── extract_btc_data.py
 │   ├── import_btc_data.py
@@ -87,11 +87,8 @@ LORA_RANK=4
 LORA_ALPHA=1.0
 USE_LORA=auto
 
-# Qdrant Vector DB
-USE_REMOTE_VECTOR_DB=true
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-QDRANT_COLLECTION_NAME=aic2026_keyframes
+# FAISS Local Index
+USE_REMOTE_VECTOR_DB=false
 ```
 
 ---
@@ -152,12 +149,9 @@ Chiết xuất lại vector đặc trưng cho keyframes sử dụng model đã f
 python scripts/extract_clip_features.py --device cuda
 ```
 
-### Bước 5 — Push Vectors lên Vector DB (Qdrant / Local FAISS)
+### Bước 5 — Build FAISS Local Index
 
-Đẩy toàn bộ vector và metadata lên Qdrant Database:
-
-```bash
-# Push lên Remote Qdrant
+Xây dựng FAISS Index từ dữ liệu:
 python backend/embedding/push_to_remote.py --recreate
 
 # Hoặc build local FAISS index

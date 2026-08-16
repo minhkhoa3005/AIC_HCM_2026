@@ -15,7 +15,7 @@ import torch
 from PIL import Image
 from transformers import Blip2ForConditionalGeneration, Blip2Processor
 
-from backend.config import DEVICE, INDEX_DIR, METADATA_PATH, VIDEO_METADATA_DIR
+from backend.config import DEVICE, INDEX_DIR, METADATA_PATH, VIDEO_METADATA_DIR, resolve_path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ def generate_keyframe_captions(batch_size: int = 16, save_every: int = 10, limit
             if item.get("caption") and len(item["caption"].strip()) >= 5:
                 continue
 
-            img_path = Path(item.get("path", ""))
+            img_path = resolve_path(item.get("path", ""))
             if img_path.exists():
                 try:
                     img = Image.open(img_path).convert("RGB")
@@ -109,10 +109,27 @@ def generate_keyframe_captions(batch_size: int = 16, save_every: int = 10, limit
         if not images_to_process:
             continue
 
-        # Inference batch
-        inputs = processor(images=images_to_process, return_tensors="pt").to(DEVICE)
+        # Inference batch với Prompt định hướng
+        CAPTION_PROMPT = (
+            "Describe this image in detail, focusing on: "
+            "people and their clothing colors, actions being performed, "
+            "the location or setting, and notable objects visible."
+        )
+        prompts = [CAPTION_PROMPT] * len(images_to_process)
+        inputs = processor(
+            images=images_to_process,
+            text=prompts,
+            return_tensors="pt",
+            padding=True,
+        ).to(DEVICE)
         with torch.no_grad():
-            generated_ids = model.generate(**inputs, max_new_tokens=30)
+            generated_ids = model.generate(
+                **inputs,
+                max_new_tokens=60,
+                num_beams=4,
+                length_penalty=1.2,
+                repetition_penalty=1.3,
+            )
             generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         for batch_idx, caption_text in zip(indices_to_update, generated_texts):

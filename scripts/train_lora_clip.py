@@ -37,6 +37,7 @@ from backend.config import (
     METADATA_PATH,
     TRAIN_BATCH_SIZE,
     TRAIN_LR,
+    resolve_path,
 )
 from backend.training.lora import (
     count_trainable_params,
@@ -69,7 +70,7 @@ class KeyframeCaptionDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.items[idx]
-        img_path = Path(item["path"])
+        img_path = resolve_path(item.get("path", ""))
 
         # Load và preprocess ảnh
         try:
@@ -104,7 +105,7 @@ def _load_training_data(metadata_path: Path, limit: int = 0) -> list[dict]:
             item = json.loads(line)
 
             # Cần có ảnh tồn tại — tự động fix path nếu metadata ghi sai
-            img_path = Path(item.get("path", ""))
+            img_path = resolve_path(item.get("path", ""))
             if not img_path.exists():
                 # Fallback: thử tìm trong data/keyframes/<video_id>/<filename>
                 video_id = item.get("video_id", "")
@@ -125,7 +126,16 @@ def _load_training_data(metadata_path: Path, limit: int = 0) -> list[dict]:
                 skipped_text += 1
                 continue
 
+            # Tự động dịch sang tiếng Anh để tối ưu hoá cho CLIP
+            from backend.embedding.clip_encoder import translate_vi_to_en
+            text_en = translate_vi_to_en(text)
+            
+            # Gán đè lại trường caption để Dataloader nạp text đã dịch
+            item["caption"] = text_en
             items.append(item)
+
+            if limit > 0 and len(items) >= limit:
+                break
 
     if skipped_path > 0:
         logger.warning("Bỏ qua %d mẫu do không tìm thấy file ảnh.", skipped_path)
