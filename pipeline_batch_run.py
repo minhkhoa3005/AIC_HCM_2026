@@ -166,7 +166,7 @@ def step2_extract_features(model, preprocess, device: str, limit: int = 0):
     model.eval()
     
     dataset = KeyframeDataset(paths_to_process, preprocess)
-    dataloader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=0, pin_memory=True)
+    dataloader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=4, pin_memory=True)
     
     extracted_count = 0
     with torch.no_grad():
@@ -388,9 +388,9 @@ def step4_query_and_generate_artifact(index, metadata, query_text: str = "a phot
 
 
 def main():
-    train_device = DEVICE  # Dùng thiết bị mặc định (GPU/DML) thay vì ép CPU
+    train_device = DEVICE  # Dùng thiết bị mặc định (GPU/CUDA)
     gpu_device = DEVICE
-    batch_size = 4  # Giảm batch_size xuống 4 để tránh tràn RAM GPU AMD
+    batch_size = 32  # Tối ưu cho GPU NVIDIA (CUDA)
     epochs = 3
     limit = 0  # Chỉ dùng 10 keyframes để test thử nhanh
 

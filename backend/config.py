@@ -61,17 +61,16 @@ import torch
 def _get_default_device():
     env_dev = os.getenv("DEVICE")
     if env_dev:
-        if env_dev.lower() in ("dml", "directml"):
-            import torch_directml
-            return torch_directml.device()
         return env_dev
+    if torch.cuda.is_available():
+        return "cuda"
     try:
         import torch_directml
         if torch_directml.is_available():
             return torch_directml.device()
     except ImportError:
         pass
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    return "cpu"
 
 DEVICE = _get_default_device()
 TEMPORAL_CHECKPOINT_PATH = INDEX_DIR / "temporal_encoder.pt"

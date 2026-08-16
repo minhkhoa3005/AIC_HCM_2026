@@ -145,3 +145,74 @@ def test_rocchio_feedback():
     
     assert sim_new_pos > sim_old_pos, "Vector mới phải gần với positive vector hơn"
     assert sim_new_neg < sim_old_neg, "Vector mới phải xa negative vector hơn"
+
+def test_temporal_search(tmp_path):
+    """
+    Kiểm thử thuật toán Tìm kiếm theo thời gian (Temporal Search).
+    """
+    from backend.embedding.search_algorithms import temporal_search
+    import faiss
+    import numpy as np
+
+    TEST_DIM = 256
+    
+    # Giả lập 3 cảnh trong cùng 1 video
+    metadata = [
+        {"id": 0, "video_id": "V001", "frame_id": 100, "pts_time": 10.0, "text": "nhân viên vẫy tay"},
+        {"id": 1, "video_id": "V001", "frame_id": 200, "pts_time": 20.0, "text": "xe ô tô chạy ngang qua"},
+        {"id": 2, "video_id": "V001", "frame_id": 300, "pts_time": 150.0, "text": "cảnh sát xuất hiện"}
+    ]
+    
+    # Giả lập Vector
+    v_a = np.random.rand(TEST_DIM).astype(np.float32)
+    v_b = np.random.rand(TEST_DIM).astype(np.float32)
+    v_noise = np.random.rand(TEST_DIM).astype(np.float32)
+    
+    vectors = np.array([v_a, v_b, v_noise])
+    faiss.normalize_L2(vectors)
+    
+    index = faiss.IndexFlatIP(TEST_DIM)
+    index.add(vectors)
+    
+    # Dummy encoder function returns exactly v_a and v_b
+    def dummy_encode_fn(text):
+        if "vẫy tay" in text.lower():
+            return v_a.reshape(1, -1).astype(np.float32)
+        elif "ô tô" in text.lower():
+            return v_b.reshape(1, -1).astype(np.float32)
+        return v_noise.reshape(1, -1).astype(np.float32)
+    
+    # 1. Test case Hợp lệ: Khoảng cách thời gian là 10.0s (<= 120s max_gap)
+    query = "nhân viên vẫy tay -> xe ô tô chạy ngang qua"
+    scores, matches, sub_queries = temporal_search(
+        temporal_query_text=query,
+        encode_fn=dummy_encode_fn,
+        index=index,
+        metadata=metadata,
+        max_gap_sec=120.0,
+        top_k_candidates=10,
+        top_k=5
+    )
+    
+    assert len(sub_queries) == 2
+    assert len(matches) > 0
+    
+    top_match = matches[0]
+    assert top_match["video_id"] == "V001"
+    assert top_match["id"] == 1 # Result must be Event B (xe ô tô)
+    assert top_match["event_a_frame"] == 100 # From Event A
+    assert top_match["time_gap"] == 10.0 # 20.0 - 10.0
+    
+    # 2. Test case Không hợp lệ: Khoảng cách thời gian vượt quá max_gap_sec
+    scores, matches, sub_queries = temporal_search(
+        temporal_query_text=query,
+        encode_fn=dummy_encode_fn,
+        index=index,
+        metadata=metadata,
+        max_gap_sec=5.0, # Gap 10s > 5s
+        top_k_candidates=10,
+        top_k=5
+    )
+    
+    # Không tìm thấy cặp nào thỏa mãn trong 5 giây
+    assert len(matches) == 0

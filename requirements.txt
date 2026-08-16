@@ -13,5 +13,4 @@ uvicorn[standard]>=0.29
 python-multipart
 numpy<2
 pydantic>=2
-faiss-cpu>=1.7.0
 python-dotenv>=1.0.0
