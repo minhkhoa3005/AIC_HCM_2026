@@ -76,17 +76,104 @@ def _caption_is_usable(item: dict, min_words: int) -> bool:
     return len(caption.split()) >= min_words
 
 
-def _pending_indices(items: list[dict], force: bool, min_words: int, limit: int) -> list[int]:
-    pending = []
+def _item_time(item: dict, fallback: int) -> float:
+    """Read the VFR-safe timestamp used to group keyframes into windows."""
+    for field in ("pts_time", "timestamp", "start", "frame_time"):
+        value = item.get(field)
+        try:
+            if value is not None and str(value).strip() != "":
+                return float(value)
+        except (TypeError, ValueError):
+            continue
+    for field in ("frame_id", "keyframe_ordinal"):
+        value = item.get(field)
+        try:
+            if value is not None:
+                return float(value)
+        except (TypeError, ValueError):
+            continue
+    return float(fallback)
+
+
+def _caption_windows(
+    items: list[dict],
+    *,
+    window_seconds: float,
+    force: bool,
+    min_words: int,
+    limit: int,
+) -> tuple[list[int], dict[tuple[str, int], list[int]], dict[tuple[str, int], int]]:
+    """Build one representative job per video/time window."""
+    if window_seconds <= 0:
+        raise ValueError("window_seconds must be positive")
+
+    windows: dict[tuple[str, int], list[int]] = {}
+    times: dict[int, float] = {}
     for idx, item in enumerate(items):
-        if not force and _caption_is_usable(item, min_words=min_words):
+        path = resolve_path(item.get("path", ""))
+        if not path.exists():
             continue
-        if not resolve_path(item.get("path", "")).exists():
+        timestamp = _item_time(item, idx)
+        key = (str(item.get("video_id", "unknown")), int(timestamp // window_seconds))
+        windows.setdefault(key, []).append(idx)
+        times[idx] = timestamp
+
+    representatives: dict[tuple[str, int], int] = {}
+    for key, members in windows.items():
+        window_start = key[1] * window_seconds
+        window_center = window_start + window_seconds / 2.0
+        representatives[key] = min(
+            members,
+            key=lambda idx: (abs(times[idx] - window_center), times[idx], idx),
+        )
+
+    ordered_keys = sorted(
+        windows,
+        key=lambda key: (key[0], key[1]),
+    )
+    if limit > 0:
+        ordered_keys = ordered_keys[:limit]
+    selected_windows = {key: windows[key] for key in ordered_keys}
+    pending = [
+        representatives[key]
+        for key in ordered_keys
+        if force or not _caption_is_usable(items[representatives[key]], min_words)
+    ]
+    return pending, selected_windows, {key: representatives[key] for key in ordered_keys}
+
+
+def _propagate_window_captions(
+    items: list[dict],
+    windows: dict[tuple[str, int], list[int]],
+    representatives: dict[tuple[str, int], int],
+    *,
+    model_name: str,
+    model_type: str,
+    prompt_name: str,
+    window_seconds: float,
+    force: bool,
+) -> int:
+    """Copy a representative caption to keyframes in the same time window."""
+    updated = 0
+    for key, members in windows.items():
+        representative = items[representatives[key]]
+        caption = str(representative.get("caption") or "").strip()
+        if not caption:
             continue
-        pending.append(idx)
-        if limit > 0 and len(pending) >= limit:
-            break
-    return pending
+        for idx in members:
+            if not force and _caption_is_usable(items[idx], min_words=1):
+                continue
+            items[idx]["caption"] = caption
+            items[idx]["caption_model"] = model_name
+            items[idx]["caption_model_type"] = model_type
+            items[idx]["caption_prompt"] = prompt_name
+            items[idx]["caption_source"] = "representative_window"
+            items[idx]["caption_source_frame_id"] = items[representatives[key]].get("frame_id")
+            items[idx]["caption_window_seconds"] = window_seconds
+            items[idx]["caption_window_id"] = f"{key[0]}:{key[1]}"
+            items[idx]["caption_word_count"] = len(caption.split())
+            updated += 1
+    return updated
 
 
 def _load_images(items: list[dict], indices: Iterable[int]) -> tuple[list[Image.Image], list[int]]:
@@ -148,28 +235,54 @@ def _clean_caption(text: str, prompt: str) -> str:
 
 
 def generate_keyframe_captions(
-    batch_size: int = 4,
+    batch_size: int = 2,
     save_every: int = 10,
     limit: int = 0,
     force: bool = False,
     min_words: int = 8,
-    model_name: str = "Salesforce/blip2-opt-2.7b",
-    model_type: str = "auto",
+    model_name: str = "Salesforce/blip-image-captioning-base",
+    model_type: str = "blip",
     prompt_name: str = "aic",
-    max_new_tokens: int = 80,
-    num_beams: int = 5,
+    max_new_tokens: int = 48,
+    num_beams: int = 2,
+    window_seconds: float = 5.0,
 ) -> None:
     items = _read_metadata()
     if not items:
         return
 
     prompt = PROMPTS[prompt_name]
-    pending = _pending_indices(items, force=force, min_words=min_words, limit=limit)
+    pending, windows, representatives = _caption_windows(
+        items,
+        window_seconds=window_seconds,
+        force=force,
+        min_words=min_words,
+        limit=limit,
+    )
     if not pending:
-        logger.info("All %d keyframes already have usable captions.", len(items))
+        propagated = _propagate_window_captions(
+            items,
+            windows,
+            representatives,
+            model_name=model_name,
+            model_type=model_type,
+            prompt_name=prompt_name,
+            window_seconds=window_seconds,
+            force=force,
+        )
+        if propagated:
+            _flush_to_disk(items)
+        logger.info("No new representative captions needed; propagated %d captions.", propagated)
         return
 
-    logger.info("Captioning %d/%d keyframes with %s on %s.", len(pending), len(items), model_name, DEVICE)
+    logger.info(
+        "Captioning %d representative windows for %d keyframes with %s on %s (window=%.1fs).",
+        len(pending),
+        len(items),
+        model_name,
+        DEVICE,
+        window_seconds,
+    )
     model, processor, resolved_model_type = _load_caption_model(model_name, model_type)
 
     updated_count = 0
@@ -219,22 +332,38 @@ def generate_keyframe_captions(
             batches_since_save = 0
             logger.info("Saved caption checkpoint to %s.", METADATA_PATH)
 
+    propagated = _propagate_window_captions(
+        items,
+        windows,
+        representatives,
+        model_name=model_name,
+        model_type=resolved_model_type,
+        prompt_name=prompt_name,
+        window_seconds=window_seconds,
+        force=force,
+    )
     _flush_to_disk(items)
-    logger.info("Done. Updated %d captions in %s.", updated_count, METADATA_PATH)
+    logger.info(
+        "Done. Generated %d representative captions and propagated %d window captions to %s.",
+        updated_count,
+        propagated,
+        METADATA_PATH,
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate visual captions for keyframes")
-    parser.add_argument("--batch-size", type=int, default=4, help="Images per captioning batch")
+    parser.add_argument("--batch-size", type=int, default=2, help="Representative images per captioning batch")
     parser.add_argument("--save-every", type=int, default=10, help="Flush metadata after every N batches")
     parser.add_argument("--limit", type=int, default=0, help="Limit pending keyframes for a smoke test (0=all)")
     parser.add_argument("--force", action="store_true", help="Regenerate captions even when one already exists")
     parser.add_argument("--min-words", type=int, default=8, help="Minimum words for a caption to be considered usable")
-    parser.add_argument("--model-name", default="Salesforce/blip2-opt-2.7b", help="Hugging Face caption model")
-    parser.add_argument("--model-type", choices=["auto", "blip", "blip2"], default="auto", help="Caption model family")
+    parser.add_argument("--model-name", default="Salesforce/blip-image-captioning-base", help="Hugging Face caption model")
+    parser.add_argument("--model-type", choices=["auto", "blip", "blip2"], default="blip", help="Caption model family")
     parser.add_argument("--prompt", choices=sorted(PROMPTS), default="aic", help="Prompt preset")
-    parser.add_argument("--max-new-tokens", type=int, default=80, help="Maximum generated caption tokens")
-    parser.add_argument("--num-beams", type=int, default=5, help="Beam search width")
+    parser.add_argument("--max-new-tokens", type=int, default=48, help="Maximum generated caption tokens")
+    parser.add_argument("--num-beams", type=int, default=2, help="Beam search width")
+    parser.add_argument("--window-seconds", type=float, default=5.0, help="Seconds per representative caption window")
     args = parser.parse_args()
 
     generate_keyframe_captions(
@@ -248,4 +377,5 @@ if __name__ == "__main__":
         prompt_name=args.prompt,
         max_new_tokens=args.max_new_tokens,
         num_beams=args.num_beams,
+        window_seconds=args.window_seconds,
     )

@@ -12,6 +12,7 @@ custom keyframes -> metadata -> CLIP features -> two-level FAISS index -> API/se
 - Local API uses `video.index` and `scene.index` instead of a random `.index` file.
 - Training pipeline was optimized for batching and GPU use when available.
 - CLIP feature extraction exists for custom keyframes in `scripts/extract_clip_features.py`.
+- Caption generation now selects one representative keyframe per 5-second VFR-safe window and propagates its caption within that window.
 
 ## Next
 
@@ -26,3 +27,4 @@ custom keyframes -> metadata -> CLIP features -> two-level FAISS index -> API/se
 
 - Vietnamese text can be used as query input, but CLIP text encoding still runs through English translation by default.
 - The standalone extractor in the companion video-extract project produces `keyframes/` and `map-keyframes/`, but not CLIP features.
+- Caption window grouping uses `pts_time` first and only falls back to frame identifiers when timestamps are unavailable.

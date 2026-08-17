@@ -8,7 +8,7 @@ The current codebase is organized around custom keyframes, per-frame metadata, C
 1. Extract BTC data archives.
 2. Build `data/keyframes/` and `data/map-keyframes/`.
 3. Import metadata into `data/index/metadata.jsonl`.
-4. Optionally generate captions and transcripts.
+4. Optionally generate representative captions and transcripts.
 5. Extract CLIP features for the keyframes.
 6. Build `video.index` and `scene.index`.
 
@@ -50,15 +50,21 @@ python -m backend.api.main
 Optional steps:
 
 ```bash
-python -m backend.preprocessing.generate_captions
+python -m backend.preprocessing.generate_captions --window-seconds 5 --batch-size 2 --max-new-tokens 48 --num-beams 2
 python scripts/train_lora_clip.py --epochs 3 --batch-size 32 --num-workers 4
 ```
 
 Caption smoke test before a full run:
 
 ```bash
-python -m backend.preprocessing.generate_captions --limit 100 --batch-size 1 --prompt aic
+python -m backend.preprocessing.generate_captions --limit 100 --window-seconds 5 --batch-size 2 --prompt aic --max-new-tokens 48 --num-beams 2
 ```
+
+Captioning is window-based: one representative keyframe is selected per 5-second
+window using `pts_time`, captioned with BLIP, and propagated to keyframes in the
+same video/time window. This reduces captioning cost while preserving a text label
+for CLIP training. Use `--force` to regenerate representatives and their propagated
+captions.
 
 ## Batch Runner
 
