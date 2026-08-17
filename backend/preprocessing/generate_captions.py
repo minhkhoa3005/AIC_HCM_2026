@@ -21,9 +21,11 @@ logger = logging.getLogger(__name__)
 
 PROMPTS = {
     "aic": (
-        "Describe this video keyframe for visual search. Mention people, clothing colors, "
-        "actions, scene location, important objects, vehicle types, signs or readable text, "
-        "and the overall event. Use one concise English sentence."
+        "Write one factual English caption for visual retrieval of this video frame. "
+        "Describe only visible evidence. Include the main people or objects, their actions, "
+        "clothing colors, object colors, spatial relations, location, vehicles, signs, logos, "
+        "and readable text when visible. Preserve numbers and counts. Do not guess identity, "
+        "intent, hidden details, or the answer to a question. Use one detailed but concise sentence."
     ),
     "dense": (
         "Describe the image in detail for image retrieval. Include visible people, clothing, "
@@ -150,7 +152,7 @@ def generate_keyframe_captions(
     save_every: int = 10,
     limit: int = 0,
     force: bool = False,
-    min_words: int = 5,
+    min_words: int = 8,
     model_name: str = "Salesforce/blip2-opt-2.7b",
     model_type: str = "auto",
     prompt_name: str = "aic",
@@ -227,7 +229,7 @@ if __name__ == "__main__":
     parser.add_argument("--save-every", type=int, default=10, help="Flush metadata after every N batches")
     parser.add_argument("--limit", type=int, default=0, help="Limit pending keyframes for a smoke test (0=all)")
     parser.add_argument("--force", action="store_true", help="Regenerate captions even when one already exists")
-    parser.add_argument("--min-words", type=int, default=5, help="Minimum words for a caption to be considered usable")
+    parser.add_argument("--min-words", type=int, default=8, help="Minimum words for a caption to be considered usable")
     parser.add_argument("--model-name", default="Salesforce/blip2-opt-2.7b", help="Hugging Face caption model")
     parser.add_argument("--model-type", choices=["auto", "blip", "blip2"], default="auto", help="Caption model family")
     parser.add_argument("--prompt", choices=sorted(PROMPTS), default="aic", help="Prompt preset")
