@@ -23,13 +23,6 @@ class Entity(BaseModel):
     actions: list[EntityAction] = Field(default_factory=list)
 
 
-class TrakeEvent(BaseModel):
-    """One ordered event milestone for a TRAKE query."""
-
-    event_id: int
-    description: str
-
-
 class CaptureContext(BaseModel):
     """Optional camera/source context for visual CLIP query expansion."""
 
@@ -62,7 +55,8 @@ class QueryPlan(BaseModel):
     task_type: TaskType
     search_description: str
     question: str | None = None
-    events: list[TrakeEvent] = Field(default_factory=list)
+    anchor: str = ""
+    expansions: list[str] = Field(default_factory=list)
     entities: list[Entity] = Field(default_factory=list)
     objects: list[str] = Field(default_factory=list)
     actions: list[str] = Field(default_factory=list)

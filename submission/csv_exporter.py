@@ -8,6 +8,7 @@ from pathlib import Path
 from pipeline.prediction import Prediction
 
 from .config import SubmissionConfig
+from .validation import validate_predictions
 
 
 def export_csv(
@@ -18,6 +19,7 @@ def export_csv(
     """Write predictions to CSV. This is the only module that formats submissions."""
 
     resolved_config = config or SubmissionConfig()
+    validate_predictions(predictions)
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8", newline="") as handle:

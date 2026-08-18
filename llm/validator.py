@@ -9,7 +9,6 @@ from .schemas import QueryPlan
 from .task_types import TaskType
 
 LIST_FIELDS = (
-    "events",
     "entities",
     "objects",
     "actions",
@@ -17,6 +16,7 @@ LIST_FIELDS = (
     "positive_constraints",
     "negative_constraints",
     "metadata_keywords",
+    "expansions",
     "clip_queries",
 )
 
@@ -58,6 +58,17 @@ def validate_query_plan(raw_plan: dict[str, Any]) -> QueryPlan:
         raise ValueError(f"Invalid QueryPlan payload: {exc}") from exc
 
     _validate_task_invariants(validated)
+    if not validated.anchor.strip():
+        raise ValueError("QueryPlan.anchor must contain an English CLIP anchor")
+    if len(validated.expansions) != 10:
+        raise ValueError("QueryPlan.expansions must contain exactly 10 English expansions")
+    english_fields = [validated.anchor, *validated.expansions]
+    if any(not isinstance(value, str) or not value.strip() for value in english_fields):
+        raise ValueError("anchor and expansions must be non-empty strings")
+    if any(not value.isascii() for value in english_fields):
+        raise ValueError("anchor and expansions must contain English ASCII text")
+    if len(set(value.casefold() for value in validated.expansions)) != 10:
+        raise ValueError("expansions must be distinct")
     return validated
 
 
@@ -98,8 +109,6 @@ def _validate_task_invariants(plan: QueryPlan) -> None:
     if plan.task_type == TaskType.TEXTUAL_KIS:
         if plan.question is not None:
             raise ValueError("TEXTUAL_KIS plans must set question to null")
-        if plan.events:
-            raise ValueError("TEXTUAL_KIS plans must not contain events")
         return
 
     if plan.task_type == TaskType.QA:
@@ -107,14 +116,4 @@ def _validate_task_invariants(plan: QueryPlan) -> None:
             raise ValueError("QA plans must contain a non-empty question")
         return
 
-    if plan.question is not None:
-        raise ValueError("TRAKE plans must set question to null")
-    if not plan.events:
-        raise ValueError("TRAKE plans must contain ordered events")
-
-    event_ids = [event.event_id for event in plan.events]
-    expected_ids = list(range(1, len(plan.events) + 1))
-    if event_ids != expected_ids:
-        raise ValueError("TRAKE event_id values must be consecutive and start at 1")
-    if len(plan.clip_queries) != len(plan.events):
-        raise ValueError("TRAKE plans must contain exactly one clip query per event")
+    raise ValueError(f"Unsupported task_type: {plan.task_type}")

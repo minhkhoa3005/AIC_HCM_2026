@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from .config import LLMConfig
@@ -31,6 +32,23 @@ def generate_llm_json(
     payload = _parse_json_response(_response_text(response))
     if not isinstance(payload, dict):
         raise ValueError("LLM response must be a JSON object")
+    return payload
+
+
+def generate_vlm_json(
+    prompt: str,
+    image_paths: list[str],
+    config: LLMConfig,
+    client: Any | None = None,
+) -> dict[str, Any]:
+    """Generate JSON from Gemini using a text prompt plus local images."""
+    if client is not None:
+        response = _generate_multimodal_content(client, prompt, image_paths, config)
+    else:
+        response = _generate_multimodal_with_key_rotation(prompt, image_paths, config)
+    payload = _parse_json_response(_response_text(response))
+    if not isinstance(payload, dict):
+        raise ValueError("VLM response must be a JSON object")
     return payload
 
 
@@ -77,6 +95,29 @@ def _generate_content_with_key_rotation(
     raise RuntimeError("All configured LLM API keys failed or are cooling down") from last_error
 
 
+def _generate_multimodal_with_key_rotation(
+    prompt: str,
+    image_paths: list[str],
+    config: LLMConfig,
+) -> Any:
+    if not config.llm_api_keys:
+        raise ValueError("LLM_API_KEYS is required when a VLM feature is enabled")
+
+    pool = _get_key_pool(config.llm_api_keys)
+    last_error: Exception | None = None
+    for _ in range(len(config.llm_api_keys)):
+        api_key = pool.next_key()
+        try:
+            client = _build_llm_client_for_key(config, api_key)
+            response = _generate_multimodal_content(client, prompt, image_paths, config)
+            pool.mark_available(api_key)
+            return response
+        except Exception as exc:
+            pool.mark_failed(api_key)
+            last_error = exc
+    raise RuntimeError("All configured VLM API keys failed or are cooling down") from last_error
+
+
 def _generate_content(
     client: Any,
     prompt: str,
@@ -88,6 +129,31 @@ def _generate_content(
         model=config.llm_model,
         contents=prompt,
         config=generation_config,
+    )
+
+
+def _generate_multimodal_content(
+    client: Any,
+    prompt: str,
+    image_paths: list[str],
+    config: LLMConfig,
+) -> Any:
+    try:
+        from google.genai import types
+    except ImportError as exc:  # pragma: no cover - depends on local install
+        raise ImportError("google-genai is required for Gemini VLM") from exc
+
+    contents: list[Any] = [prompt]
+    for image_path in image_paths:
+        path = Path(image_path)
+        if not path.exists():
+            raise FileNotFoundError(f"VLM image not found: {path}")
+        mime_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+        contents.append(types.Part.from_bytes(data=path.read_bytes(), mime_type=mime_type))
+    return client.models.generate_content(
+        model=config.llm_model,
+        contents=contents,
+        config=_build_generation_config(0.0),
     )
 
 

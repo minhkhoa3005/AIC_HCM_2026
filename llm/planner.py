@@ -9,6 +9,7 @@ from .config import LLMConfig, get_llm_config
 from .llm_client import generate_llm_json
 from .rewrite import rewrite_query_with_llm
 from .schemas import QueryPlan
+from .task_types import TaskType, normalize_task_type
 from .validator import validate_query_plan
 
 
@@ -28,10 +29,10 @@ NGÔN NGỮ VÀ BẢO TOÀN THÔNG TIN
   broadcast, mobile_phone hoặc unknown; không suy đoán source.
 
 TASK_TYPE
-- TEXTUAL_KIS: tìm một cảnh/keyframe; question=null, events=[].
-- QA: cần trả lời câu hỏi; question là nguyên câu hỏi tiếng Việt, events=[].
-- TRAKE: chuỗi sự kiện theo thời gian; question=null, events không rỗng,
-  event_id là 1..n theo đúng thứ tự.
+- TASK_TYPE được cung cấp sẵn từ tên file của ban tổ chức. Không tự suy luận,
+  không đổi task_type.
+- TEXTUAL_KIS: tìm một cảnh/keyframe; question=null.
+- QA: cần trả lời câu hỏi; question là nguyên câu hỏi tiếng Việt.
 
 VISUAL_HINTS
 - medium luôn là "video frame".
@@ -47,7 +48,6 @@ CLIP_QUERIES
   trực quan độc lập có thể xuất hiện trong một frame; không phải câu hỏi/lệnh.
 - TEXTUAL_KIS: 1 query chính, thêm tối đa 1 query khi có bằng chứng độc lập.
   QA: 1 query chính, thêm tối đa 3 query bằng chứng độc lập.
-  TRAKE: đúng 1 query cho mỗi event, theo thứ tự event.
 - Query mới phải thêm một bằng chứng rõ ràng (chủ thể/vật thể, hành động-quan
   hệ, bối cảnh, hoặc vùng logo/overlay/biển hiệu), không chỉ đổi từ đồng nghĩa.
 - Không tạo query nhằm "nhìn kỹ" hay suy luận đáp án: cấm "showing clothing
@@ -63,25 +63,19 @@ MINI FEW-SHOT (chỉ minh họa field khác biệt; JSON thật phải đủ sch
 KIS:
 Input: Tìm cảnh xe buýt màu vàng dừng bên đường.
 Output liên quan:
-{"task_type":"TEXTUAL_KIS","question":null,"events":[],"visual_hints":{"medium":"video frame","capture_context":null},"clip_queries":["a yellow bus stopped by the road"]}
+{"task_type":"TEXTUAL_KIS","question":null,"visual_hints":{"medium":"video frame","capture_context":null},"clip_queries":["a yellow bus stopped by the road"]}
 
 QA:
 Input: Tìm bốn phụ nữ cầm giấy trong chương trình truyền hình. Người thứ hai mặc áo màu gì?
 Output liên quan:
-{"task_type":"QA","question":"Người thứ hai mặc áo màu gì?","events":[],"clip_queries":["four women standing side by side and holding sheets of paper in a television broadcast"]}
+{"task_type":"QA","question":"Người thứ hai mặc áo màu gì?","clip_queries":["four women standing side by side and holding sheets of paper in a television broadcast"]}
 Không tạo query có màu áo giả định hoặc "showing clothing details".
-
-TRAKE:
-Input: Trong CCTV cố định, tìm người mở cửa xe rồi lấy ba lô đỏ.
-Output liên quan:
-{"task_type":"TRAKE","question":null,"events":[{"event_id":1,"description":"người mở cửa xe"},{"event_id":2,"description":"người lấy ba lô đỏ"}],"visual_hints":{"medium":"video frame","capture_context":{"source":"surveillance","camera_style":"camera giám sát CCTV","viewpoint":null,"camera_motion":"tĩnh","certainty":"explicit"}},"clip_queries":["fixed CCTV surveillance footage showing a person opening a car door","fixed CCTV surveillance footage showing a person taking a red backpack"]}
 
 CHỈ TRẢ VỀ JSON, không markdown/giải thích/field thừa:
 {
-  "task_type":"TEXTUAL_KIS | QA | TRAKE",
+  "task_type":"TEXTUAL_KIS | QA",
   "search_description":"mô tả tiếng Việt có dấu",
   "question":"câu hỏi tiếng Việt hoặc null",
-  "events":[{"event_id":1,"description":"sự kiện tiếng Việt"}],
   "entities":[{"name":"đối tượng","type":"person | object | vehicle | location | unknown","attributes":["thuộc tính"],"actions":[{"verb":"hành động","target":"đích hoặc null"}]}],
   "objects":["danh từ"], "actions":["hành động"], "scene":["bối cảnh"],
   "positive_constraints":["ràng buộc phải có"],
@@ -95,6 +89,7 @@ CHỈ TRẢ VỀ JSON, không markdown/giải thích/field thừa:
 
 def plan_query(
     query: str,
+    task_type: TaskType | str,
     config: LLMConfig | None = None,
     rewrite_client: Any | None = None,
     planner_client: Any | None = None,
@@ -104,6 +99,7 @@ def plan_query(
     if not isinstance(query, str) or not query.strip():
         raise ValueError("query must be a non-empty string")
 
+    resolved_task_type = normalize_task_type(task_type)
     resolved_config = config or get_llm_config()
     rewritten = rewrite_query_with_llm(
         query,
@@ -116,6 +112,14 @@ def plan_query(
         f"\n\nUNCERTAIN_TERMS (dữ liệu cần thận trọng):\n"
         f"{json.dumps(rewritten.uncertain_terms, ensure_ascii=False)}"
     )
+    prompt += f"\n\nTASK_TYPE_FROM_FILENAME:\n{resolved_task_type.value}"
+    prompt += """
+
+OUTPUT CONTRACT OVERRIDE:
+- Return an English ASCII `anchor` that is the closest literal visual translation.
+- Return exactly 10 distinct English ASCII `expansions`.
+- Do not rely on `clip_queries`; downstream code derives three retrieval queries.
+"""
     raw_plan = generate_llm_json(
         prompt,
         config=resolved_config,
@@ -124,4 +128,7 @@ def plan_query(
     )
     raw_plan["raw_query"] = rewritten.raw_query
     raw_plan["rewritten_query"] = rewritten.rewritten_query
+    raw_plan["task_type"] = resolved_task_type.value
+    if not raw_plan.get("anchor") and raw_plan.get("clip_queries"):
+        raw_plan["anchor"] = raw_plan["clip_queries"][0]
     return validate_query_plan(raw_plan)
