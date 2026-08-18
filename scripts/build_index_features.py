@@ -35,6 +35,7 @@ from backend.config import (  # noqa: E402
     SMART_CUT_MAX_SCENE_KEYFRAMES,
     SMART_CUT_MIN_SCENE_KEYFRAMES,
     SMART_CUT_SIMILARITY_THRESHOLD,
+    USE_LORA,
     USE_REMOTE_VECTOR_DB,
     VIDEO_METADATA_DIR,
 )
@@ -383,12 +384,29 @@ def _write_artifact_manifest(index, metadata: list[dict], vectors: np.ndarray) -
         if float(row.get("pts_time", -1.0)) < 0:
             raise ValueError("Every index metadata row must contain pts_time >= 0")
 
+    has_lora = LORA_WEIGHTS_PATH.exists()
+    if has_lora:
+        if USE_LORA != "true":
+            raise ValueError(
+                "A LoRA checkpoint is present, so set AIC_USE_LORA=true before building the bundle"
+            )
+        import torch
+
+        checkpoint = torch.load(LORA_WEIGHTS_PATH, map_location="cpu", weights_only=False)
+        checkpoint_metadata = checkpoint.get("metadata", {}) if isinstance(checkpoint, dict) else {}
+        clip_model = checkpoint_metadata.get("clip_model", checkpoint.get("clip_model"))
+        adapter_scope = checkpoint_metadata.get("adapter_scope", checkpoint.get("adapter_scope"))
+        if clip_model != "ViT-B/32" or adapter_scope != "text_only":
+            raise ValueError(
+                "LoRA checkpoint must declare clip_model='ViT-B/32' and adapter_scope='text_only'"
+            )
+
     manifest = {
         "clip_model": "ViT-B/32",
         "image_embedding_space": "openai_clip_vit_b32",
         "embedding_dimension": 512,
         "metric": "inner_product",
-        "text_encoder_adapter": "text_only_lora" if LORA_WEIGHTS_PATH.exists() else "none",
+        "text_encoder_adapter": "text_only_lora" if has_lora else "none",
         "vector_count": int(index.ntotal),
     }
     with open(ARTIFACT_MANIFEST_PATH, "w", encoding="utf-8") as fh:
