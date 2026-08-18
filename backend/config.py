@@ -57,7 +57,10 @@ ZIP_DIR = _resolve_env_path("AIC_ZIP_DIR", ROOT_DIR / "ZIP")
 VIDEOS_DIR = DATA_ROOT / "videos"
 INDEX_DIR = DATA_ROOT / "index"
 VIDEO_METADATA_DIR = INDEX_DIR / "metadata_by_video"
-BUNDLE_DIR = INDEX_DIR / "clip-b32-btc-v1"
+BUNDLE_DIR = _resolve_env_path(
+    "AIC_ARTIFACT_DIR",
+    INDEX_DIR / "clip-b32-btc-v1",
+)
 
 # Tạo các thư mục cần thiết
 for d in (DATA_ROOT, VIDEOS_DIR, INDEX_DIR, VIDEO_METADATA_DIR, BUNDLE_DIR):
@@ -86,18 +89,18 @@ BTC_OBJECTS_DIR = DATA_ROOT / "objects"
 BTC_CLIP_FEATURES_DIR = DATA_ROOT / "clip-features"
 
 # Preprocessing / Whisper Transcribe
-WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
-WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
-WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "vi")
-WHISPER_TASK = os.getenv("WHISPER_TASK", "transcribe")
+WHISPER_MODEL_SIZE = os.getenv("AIC_WHISPER_MODEL_SIZE", os.getenv("WHISPER_MODEL_SIZE", "base"))
+WHISPER_DEVICE = os.getenv("AIC_WHISPER_DEVICE", os.getenv("WHISPER_DEVICE", "cpu"))
+WHISPER_COMPUTE_TYPE = os.getenv("AIC_WHISPER_COMPUTE_TYPE", os.getenv("WHISPER_COMPUTE_TYPE", "int8"))
+WHISPER_LANGUAGE = os.getenv("AIC_WHISPER_LANGUAGE", os.getenv("WHISPER_LANGUAGE", "vi"))
+WHISPER_TASK = os.getenv("AIC_WHISPER_TASK", os.getenv("WHISPER_TASK", "transcribe"))
 
 # Embedding / CLIP Model
-CLIP_MODEL_NAME = os.getenv("CLIP_MODEL_NAME", "ViT-B/32")
+CLIP_MODEL_NAME = os.getenv("AIC_CLIP_MODEL_NAME", os.getenv("CLIP_MODEL_NAME", "ViT-B/32"))
 import torch
 
 def _get_default_device():
-    env_dev = os.getenv("DEVICE")
+    env_dev = os.getenv("AIC_DEVICE", os.getenv("DEVICE"))
     if env_dev:
         if env_dev.lower() in ("dml", "directml"):
             import torch_directml

@@ -50,8 +50,11 @@ paths on another machine, set:
 - `AIC_PROJECT_ROOT`: project directory
 - `AIC_DATA_ROOT`: data directory
 - `AIC_ZIP_DIR`: directory that contains the BTC archives
+- `AIC_ARTIFACT_DIR`: output/input bundle directory; defaults to `data/index/clip-b32-btc-v1`
+- `AIC_CLIP_MODEL_NAME`: must remain `ViT-B/32` for the BTC bundle
+- `AIC_DEVICE`: `cuda`, `cpu`, or a supported DirectML device
 
-If you want to use GPU, set `DEVICE=cuda` in `.env`.
+If you want to use GPU, set `AIC_DEVICE=cuda` in `.env`.
 For Whisper transcription, `WHISPER_LANGUAGE` defaults to `vi` and `WHISPER_TASK` defaults to `transcribe`.
 
 ## Canonical Commands
