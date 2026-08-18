@@ -12,14 +12,31 @@ The current codebase is organized around custom keyframes, per-frame metadata, C
 5. Extract CLIP features for the keyframes.
 6. Build `video.index` and `scene.index`.
 
+The build step also creates the submission bundle:
+
+```text
+data/index/clip-b32-btc-v1/
+  artifact_manifest.json
+  video.index
+  index_metadata.json
+  lora_weights.pt        # only when text_only_lora is enabled
+```
+
+`artifact_manifest.json` records the actual `vector_count`. The build fails if
+the FAISS count and metadata count differ, if vectors are not CLIP-B/32 sized,
+or if a metadata row lacks the original `video_id`, `frame_id`, or non-negative
+`pts_time`. Set `AIC_USE_LORA=true` when using the text-only LoRA checkpoint.
+
 ## Important Paths
 
 - `data/keyframes/`: extracted keyframes
 - `data/map-keyframes/`: frame mapping CSV files
 - `data/clip-features/`: `.npy` CLIP features for keyframes
 - `data/index/metadata.jsonl`: canonical metadata
-- `data/index/video.index`: keyframe-level FAISS index
-- `data/index/scene.index`: scene-level FAISS index
+- `data/index/clip-b32-btc-v1/`: self-contained organizer bundle
+  - `video.index`: keyframe-level FAISS index
+  - `index_metadata.json`: metadata in exact FAISS row order
+  - `artifact_manifest.json`: bundle contract and vector count
 
 ## Setup
 

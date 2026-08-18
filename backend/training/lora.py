@@ -212,6 +212,8 @@ def save_lora_weights(model: nn.Module, path: Path, metadata: Optional[dict] = N
         "lora_state_dict": lora_state,
         "rank": rank,
         "alpha": alpha,
+        "clip_model": (metadata or {}).get("clip_model", "ViT-B/32"),
+        "adapter_scope": "text_only",
         "metadata": metadata or {},
     }
     torch.save(checkpoint, path)

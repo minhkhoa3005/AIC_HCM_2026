@@ -1,9 +1,9 @@
 """Build two-level FAISS indexes from organizer CLIP feature files.
 
 Outputs:
-- data/index/video.index: keyframe-level index for exact frame localization.
-- data/index/scene.index: scene-level index for coarse retrieval.
-- data/index/index_metadata.json: keyframe metadata enriched with scene_id
+- data/index/clip-b32-btc-v1/video.index: keyframe-level index for exact frame localization.
+- data/index/clip-b32-btc-v1/index_metadata.json: keyframe metadata enriched with scene_id
+- data/index/clip-b32-btc-v1/artifact_manifest.json: validated BTC bundle manifest
   (only keyframes that have a real CLIP vector — has_feature=True).
 - data/index/scene_metadata.json: scene metadata and keyframe membership.
 - data/index/video_metadata/<video_id>.jsonl: FULL per-video metadata,
@@ -23,9 +23,11 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from backend.config import (  # noqa: E402
+    ARTIFACT_MANIFEST_PATH,
     BTC_CLIP_FEATURES_DIR,
     FAISS_INDEX_PATH,
     FAISS_METADATA_PATH,
+    LORA_WEIGHTS_PATH,
     METADATA_PATH,
     QDRANT_COLLECTION_NAME,
     SCENE_FAISS_INDEX_PATH,
@@ -360,6 +362,39 @@ def _write_jsonl_by_video(rows: list[dict]) -> None:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def _write_artifact_manifest(index, metadata: list[dict], vectors: np.ndarray) -> None:
+    """Write and validate the organizer-facing CLIP bundle manifest."""
+    if index.d != 512:
+        raise ValueError(f"CLIP-B/32 index must have dimension 512, got {index.d}")
+    if index.ntotal != len(metadata):
+        raise ValueError(
+            f"FAISS/metadata mismatch: index.ntotal={index.ntotal}, rows={len(metadata)}"
+        )
+    if vectors.shape != (index.ntotal, 512):
+        raise ValueError(f"Vector matrix must have shape ({index.ntotal}, 512), got {vectors.shape}")
+    norms = np.linalg.norm(vectors, axis=1)
+    if not np.isfinite(vectors).all() or np.any(norms <= 1e-8) or not np.allclose(norms, 1.0, atol=1e-3):
+        raise ValueError("All indexed CLIP vectors must be finite, non-zero, and L2-normalized")
+    for row in metadata:
+        if not str(row.get("video_id", "")).strip():
+            raise ValueError("Every index metadata row must contain video_id")
+        if row.get("frame_id") is None:
+            raise ValueError("Every index metadata row must contain original frame_id")
+        if float(row.get("pts_time", -1.0)) < 0:
+            raise ValueError("Every index metadata row must contain pts_time >= 0")
+
+    manifest = {
+        "clip_model": "ViT-B/32",
+        "image_embedding_space": "openai_clip_vit_b32",
+        "embedding_dimension": 512,
+        "metric": "inner_product",
+        "text_encoder_adapter": "text_only_lora" if LORA_WEIGHTS_PATH.exists() else "none",
+        "vector_count": int(index.ntotal),
+    }
+    with open(ARTIFACT_MANIFEST_PATH, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, ensure_ascii=False, indent=2)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build scene-level and keyframe-level indexes from BTC features")
     parser.add_argument("--remote", action="store_true", help="Push keyframe vectors to remote vector DB")
@@ -406,6 +441,7 @@ def main() -> None:
     _write_json(FAISS_METADATA_PATH, enriched_items)   # chỉ item có vector — khớp đúng với FAISS index
     _write_json(SCENE_METADATA_PATH, scene_rows)
     _write_jsonl_by_video(final_metadata)               # đầy đủ, kể cả has_feature=False
+    _write_artifact_manifest(keyframe_index, enriched_items, keyframe_matrix)
 
     logger.info("Keyframe index: %s (%d vectors)", FAISS_INDEX_PATH, keyframe_index.ntotal)
     if scene_index is not None:
@@ -413,6 +449,7 @@ def main() -> None:
     else:
         logger.info("Scene index: skipped (no scene vectors)")
     logger.info("Keyframe metadata: %s", FAISS_METADATA_PATH)
+    logger.info("Artifact manifest: %s", ARTIFACT_MANIFEST_PATH)
     logger.info("Scene metadata: %s", SCENE_METADATA_PATH)
 
     if args.remote or USE_REMOTE_VECTOR_DB:

@@ -57,24 +57,26 @@ ZIP_DIR = _resolve_env_path("AIC_ZIP_DIR", ROOT_DIR / "ZIP")
 VIDEOS_DIR = DATA_ROOT / "videos"
 INDEX_DIR = DATA_ROOT / "index"
 VIDEO_METADATA_DIR = INDEX_DIR / "metadata_by_video"
+BUNDLE_DIR = INDEX_DIR / "clip-b32-btc-v1"
 
 # Tạo các thư mục cần thiết
-for d in (DATA_ROOT, VIDEOS_DIR, INDEX_DIR, VIDEO_METADATA_DIR):
+for d in (DATA_ROOT, VIDEOS_DIR, INDEX_DIR, VIDEO_METADATA_DIR, BUNDLE_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 # Path Metadata & FAISS Index
 METADATA_PATH = INDEX_DIR / "metadata.jsonl"
-FAISS_INDEX_PATH = INDEX_DIR / "video.index"
-SCENE_FAISS_INDEX_PATH = INDEX_DIR / "scene.index"
-FAISS_METADATA_PATH = INDEX_DIR / "index_metadata.json"
+ARTIFACT_MANIFEST_PATH = BUNDLE_DIR / "artifact_manifest.json"
+FAISS_INDEX_PATH = BUNDLE_DIR / "video.index"
+SCENE_FAISS_INDEX_PATH = BUNDLE_DIR / "scene.index"
+FAISS_METADATA_PATH = BUNDLE_DIR / "index_metadata.json"
 SCENE_METADATA_PATH = INDEX_DIR / "scene_metadata.json"
 TRAIN_PAIRS_PATH = INDEX_DIR / "train_pairs.jsonl"
 
 # LoRA Fine-tune
-LORA_WEIGHTS_PATH = INDEX_DIR / "lora_weights.pt"
+LORA_WEIGHTS_PATH = BUNDLE_DIR / "lora_weights.pt"
 LORA_RANK = int(os.getenv("LORA_RANK", "4"))
 LORA_ALPHA = float(os.getenv("LORA_ALPHA", "1.0"))
-USE_LORA = os.getenv("USE_LORA", "auto").lower()  # "auto" | "true" | "false"
+USE_LORA = os.getenv("AIC_USE_LORA", os.getenv("USE_LORA", "auto")).lower()  # "auto" | "true" | "false"
 
 # BTC Data Directories
 KEYFRAMES_DIR = DATA_ROOT / "keyframes"
