@@ -13,7 +13,9 @@ from typing import Iterable
 import torch
 from PIL import Image
 
-from backend.config import DEVICE, METADATA_PATH, VIDEO_METADATA_DIR, resolve_path
+from backend.config import CURRENT_METADATA_PATH, DEVICE, VIDEO_METADATA_DIR, resolve_path
+
+METADATA_PATH = CURRENT_METADATA_PATH
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

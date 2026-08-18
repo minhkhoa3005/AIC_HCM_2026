@@ -32,7 +32,7 @@ from backend.config import (  # noqa: E402
     LORA_ALPHA,
     LORA_RANK,
     LORA_WEIGHTS_PATH,
-    METADATA_PATH,
+    CURRENT_METADATA_PATH,
     TRAIN_BATCH_SIZE,
     TRAIN_LR,
     resolve_path,
@@ -90,7 +90,12 @@ def _resolve_text(item: dict, translate_text: bool) -> str:
     return text
 
 
-def _load_training_data(metadata_path: Path, limit: int = 0, translate_text: bool = False) -> list[dict]:
+def _load_training_data(
+    metadata_path: Path,
+    limit: int = 0,
+    translate_text: bool = False,
+    video_ids: set[str] | None = None,
+) -> list[dict]:
     if not metadata_path.exists():
         logger.error("Could not find %s. Run import_btc_data.py first.", metadata_path)
         return []
@@ -104,6 +109,8 @@ def _load_training_data(metadata_path: Path, limit: int = 0, translate_text: boo
             if not line.strip():
                 continue
             item = json.loads(line)
+            if video_ids is not None and str(item.get("video_id", "")) not in video_ids:
+                continue
 
             img_path = resolve_path(item.get("path", ""))
             if not img_path.exists():
@@ -254,6 +261,12 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--resume", action="store_true", help="Resume from an existing LoRA checkpoint")
     parser.add_argument("--device", type=str, default=None, help="Device override: cpu, cuda, dml")
+    parser.add_argument(
+        "--video-ids",
+        type=str,
+        default="",
+        help="Comma-separated video IDs for this session (empty=all videos)",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -291,7 +304,13 @@ def main():
     trainable, total = count_trainable_params(model)
     logger.info("Trainable parameters: %s / %s (%.2f%%)", f"{trainable:,}", f"{total:,}", 100 * trainable / total)
 
-    items = _load_training_data(METADATA_PATH, limit=args.limit, translate_text=args.translate_text)
+    selected_video_ids = {value.strip() for value in args.video_ids.split(",") if value.strip()} or None
+    items = _load_training_data(
+        CURRENT_METADATA_PATH,
+        limit=args.limit,
+        translate_text=args.translate_text,
+        video_ids=selected_video_ids,
+    )
     if len(items) < 10:
         logger.error("Not enough training data (%d samples).", len(items))
         return

@@ -12,6 +12,16 @@ The current codebase is organized around custom keyframes, per-frame metadata, C
 5. Extract CLIP features for the keyframes.
 6. Build `video.index` and `scene.index`.
 
+The import step writes the current batch to `data/index/metadata_current.jsonl`.
+After training that batch successfully, merge it into cumulative
+`data/index/metadata.jsonl`:
+
+```bash
+python scripts/merge_current_metadata.py
+```
+
+Build the final FAISS bundle only from cumulative `metadata.jsonl`.
+
 The build step also creates the submission bundle:
 
 ```text

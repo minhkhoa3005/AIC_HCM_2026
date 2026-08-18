@@ -68,6 +68,7 @@ for d in (DATA_ROOT, VIDEOS_DIR, INDEX_DIR, VIDEO_METADATA_DIR, BUNDLE_DIR):
 
 # Path Metadata & FAISS Index
 METADATA_PATH = INDEX_DIR / "metadata.jsonl"
+CURRENT_METADATA_PATH = INDEX_DIR / "metadata_current.jsonl"
 ARTIFACT_MANIFEST_PATH = BUNDLE_DIR / "artifact_manifest.json"
 FAISS_INDEX_PATH = BUNDLE_DIR / "video.index"
 SCENE_FAISS_INDEX_PATH = BUNDLE_DIR / "scene.index"

@@ -1,6 +1,6 @@
 """Import organizer BTC keyframes and metadata into keyframe-level JSONL.
 
-Each row in metadata.jsonl is one organizer keyframe. frame_id is resolved with
+Each row in metadata_current.jsonl is one organizer keyframe. frame_id is resolved with
 the following priority:
   1. Organizer map-keyframes file (BTC_MAP_KEYFRAMES_DIR), if it lists this
      keyframe explicitly — most trustworthy, always preferred.
@@ -34,6 +34,7 @@ from backend.config import (  # noqa: E402
     BTC_MAP_KEYFRAMES_DIR,
     BTC_MEDIA_INFO_DIR,
     INDEX_DIR,
+    CURRENT_METADATA_PATH,
     KEYFRAMES_DIR,
     METADATA_PATH,
     VIDEO_METADATA_DIR,
@@ -430,6 +431,7 @@ def build_btc_metadata(
     with_transcript: bool = False,
     force: bool = False,
     translate_titles: bool = False,
+    video_ids: set[str] | None = None,
 ) -> None:
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     VIDEO_METADATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -439,7 +441,10 @@ def build_btc_metadata(
         logger.error("No keyframe data found. Expected: %s/<batch>/<video_id>/*.jpg", KEYFRAMES_DIR)
         return
 
+    selected_video_ids = video_ids
     video_ids = sorted(keyframes)
+    if selected_video_ids is not None:
+        video_ids = [video_id for video_id in video_ids if video_id in selected_video_ids]
     if limit_videos > 0:
         video_ids = video_ids[:limit_videos]
         logger.info("Limiting to first %d videos.", limit_videos)
@@ -535,14 +540,14 @@ def build_btc_metadata(
             len(video_items) - mapped - exact_pts,
         )
 
-    with open(METADATA_PATH, "w", encoding="utf-8") as fh:
+    with open(CURRENT_METADATA_PATH, "w", encoding="utf-8") as fh:
         for item in all_items:
             fh.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     logger.info(
         "Done. Wrote %d total keyframe rows to %s (Skipped %d existing videos).",
         len(all_items),
-        METADATA_PATH,
+        CURRENT_METADATA_PATH,
         skipped_count,
     )
 
@@ -550,6 +555,12 @@ def build_btc_metadata(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Single Entrypoint: Import BTC AIC keyframes & metadata")
     parser.add_argument("--limit", type=int, default=0, help="Limit number of videos to import (0=all)")
+    parser.add_argument(
+        "--video-ids",
+        type=str,
+        default="",
+        help="Comma-separated video IDs for the current batch (empty=all)",
+    )
     parser.add_argument(
         "--with-transcript",
         action="store_true",
@@ -571,4 +582,5 @@ if __name__ == "__main__":
         with_transcript=args.with_transcript,
         force=args.force,
         translate_titles=args.translate_titles,
+        video_ids={value.strip() for value in args.video_ids.split(",") if value.strip()} or None,
     )
