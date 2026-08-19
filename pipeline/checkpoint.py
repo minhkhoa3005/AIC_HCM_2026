@@ -33,3 +33,15 @@ class QueryCheckpoint:
         }
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+    def load_predictions(self) -> list[Prediction]:
+        """Load all predictions so a resumed run can export a complete CSV."""
+        if not self.path.exists():
+            return []
+        predictions: list[Prediction] = []
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            payload = json.loads(line)
+            predictions.extend(Prediction.model_validate(item) for item in payload.get("predictions", []))
+        return predictions

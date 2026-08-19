@@ -104,9 +104,24 @@ class LocalBundleRetriever:
                 candidates.append(Candidate(
                     video_id=key[0],
                     frame_id=key[1],
-                    keyframe_path=str(row.get("path", row.get("keyframe_path", ""))),
+                    keyframe_path=_resolve_keyframe_path(row, self.bundle_dir),
                     clip_score=float(score),
                     metadata=dict(row),
                 ))
             results.append(QueryRetrievalResult(query_index=query_index, query_text=query, candidates=candidates))
         return results
+
+
+def _resolve_keyframe_path(row: dict[str, Any], bundle_dir: Path) -> str:
+    """Resolve metadata paths for optional VLM use without changing metadata."""
+    raw = str(row.get("path", row.get("keyframe_path", ""))).strip()
+    path = Path(raw)
+    if path.is_absolute() or path.exists():
+        return str(path)
+    root = os.getenv("AIC_KEYFRAMES_ROOT", "").strip()
+    if root:
+        candidate = Path(root).expanduser() / path
+        if candidate.exists():
+            return str(candidate.resolve())
+    # Keep the original path for diagnostics when images are not bundled.
+    return str(path)

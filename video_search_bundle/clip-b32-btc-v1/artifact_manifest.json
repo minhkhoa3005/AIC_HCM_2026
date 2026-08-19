@@ -1,0 +1,8 @@
+{
+  "clip_model": "ViT-B/32",
+  "image_embedding_space": "openai_clip_vit_b32",
+  "embedding_dimension": 512,
+  "metric": "inner_product",
+  "text_encoder_adapter": "text_only_lora",
+  "vector_count": 229381
+}

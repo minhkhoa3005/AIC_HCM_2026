@@ -25,6 +25,8 @@ Thumbs.db
 !.env.example
 
 # Large/raw local materials
+video_search_bundle/clip-b32-btc-v1/*
+!video_search_bundle/clip-b32-btc-v1/artifact_manifest.json
 *.pdf
 *.pptx
 *.ppt
