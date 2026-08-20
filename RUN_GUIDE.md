@@ -60,7 +60,7 @@ Tạo `.env` từ `.env.example`, sau đó điền API key Gemini:
 LLM_PROVIDER=gemini
 LLM_API_KEYS=YOUR_GEMINI_API_KEY
 LLM_MODEL=gemini-2.5-flash
-LLM_VLM_MODEL=gemini-2.5-pro
+LLM_VLM_MODEL=gemini-3.1-pro-preview
 LLM_REWRITE_TEMPERATURE=0
 LLM_PLANNER_TEMPERATURE=0
 VLM_CANDIDATE_LIMIT=40
