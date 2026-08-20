@@ -37,6 +37,13 @@ class APIKeyPool:
                 return state.value
         raise RuntimeError("No API keys are currently available")
 
+    def cooldown_remaining(self) -> float:
+        """Return seconds until at least one key becomes available."""
+
+        now = monotonic()
+        latest = max((state.cooldown_until for state in self._keys), default=now)
+        return max(0.0, latest - now)
+
     def mark_failed(self, key: str) -> None:
         for state in self._keys:
             if state.value == key:

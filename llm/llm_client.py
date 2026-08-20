@@ -14,7 +14,7 @@ from typing import Any
 from .config import LLMConfig
 from .providers.key_pool import APIKeyPool
 
-_KEY_POOLS: dict[tuple[str, ...], APIKeyPool] = {}
+_KEY_POOLS: dict[tuple[str, tuple[str, ...]], APIKeyPool] = {}
 
 
 def generate_llm_json(
@@ -86,10 +86,13 @@ def _build_llm_client_for_key(config: LLMConfig, api_key: str) -> Any:
     return genai.Client(api_key=api_key)
 
 
-def _get_key_pool(keys: tuple[str, ...]) -> APIKeyPool:
-    if keys not in _KEY_POOLS:
-        _KEY_POOLS[keys] = APIKeyPool(list(keys))
-    return _KEY_POOLS[keys]
+def _get_key_pool(keys: tuple[str, ...], model: str) -> APIKeyPool:
+    """Keep cooldown state separate for text and multimodal models."""
+
+    pool_key = (model, keys)
+    if pool_key not in _KEY_POOLS:
+        _KEY_POOLS[pool_key] = APIKeyPool(list(keys))
+    return _KEY_POOLS[pool_key]
 
 
 def _generate_content_with_key_rotation(
@@ -100,10 +103,17 @@ def _generate_content_with_key_rotation(
     if not config.llm_api_keys:
         raise ValueError("LLM_API_KEYS is required when an LLM feature is enabled")
 
-    pool = _get_key_pool(config.llm_api_keys)
+    pool = _get_key_pool(config.llm_api_keys, config.llm_model)
     last_error: Exception | None = None
     for _ in range(len(config.llm_api_keys)):
-        api_key = pool.next_key()
+        try:
+            api_key = pool.next_key()
+        except RuntimeError as exc:
+            wait = pool.cooldown_remaining()
+            raise RuntimeError(
+                f"No API keys available for model {config.llm_model!r}; "
+                f"all keys are cooling down. Retry in about {wait:.0f}s."
+            ) from exc
         try:
             client = _build_llm_client_for_key(config, api_key)
             response = _generate_content(client, prompt, config, temperature)
@@ -127,10 +137,17 @@ def _generate_multimodal_with_key_rotation(
     if not config.llm_api_keys:
         raise ValueError("LLM_API_KEYS is required when a VLM feature is enabled")
 
-    pool = _get_key_pool(config.llm_api_keys)
+    pool = _get_key_pool(config.llm_api_keys, config.llm_vlm_model)
     last_error: Exception | None = None
     for _ in range(len(config.llm_api_keys)):
-        api_key = pool.next_key()
+        try:
+            api_key = pool.next_key()
+        except RuntimeError as exc:
+            wait = pool.cooldown_remaining()
+            raise RuntimeError(
+                f"No API keys available for VLM model {config.llm_vlm_model!r}; "
+                f"all keys are cooling down. Retry in about {wait:.0f}s."
+            ) from exc
         try:
             client = _build_llm_client_for_key(config, api_key)
             response = _generate_multimodal_content(client, prompt, image_paths, config)
@@ -139,7 +156,10 @@ def _generate_multimodal_with_key_rotation(
         except Exception as exc:
             pool.mark_failed(api_key)
             last_error = exc
-    raise RuntimeError("All configured VLM API keys failed or are cooling down") from last_error
+    raise RuntimeError(
+        "All configured VLM API keys failed or are cooling down. "
+        f"Last error: {type(last_error).__name__}: {last_error}"
+    ) from last_error
 
 
 def _generate_content(
