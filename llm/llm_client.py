@@ -92,7 +92,10 @@ def _generate_content_with_key_rotation(
             pool.mark_failed(api_key)
             last_error = exc
 
-    raise RuntimeError("All configured LLM API keys failed or are cooling down") from last_error
+    raise RuntimeError(
+        "All configured LLM API keys failed or are cooling down. "
+        f"Last error: {type(last_error).__name__}: {last_error}"
+    ) from last_error
 
 
 def _generate_multimodal_with_key_rotation(

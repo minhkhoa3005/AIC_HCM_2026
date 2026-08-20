@@ -1,0 +1,11 @@
+# CUDA-enabled installation for Windows/NVIDIA.
+# The primary index supplies CUDA wheels; PyPI supplies the remaining packages.
+--index-url https://download.pytorch.org/whl/cu126
+--extra-index-url https://pypi.org/simple
+-r requirements.txt
+torchvision>=0.16
+torchaudio>=2.1
+# Pin the CUDA build family so pip does not select an unrelated CPU wheel.
+torch==2.7.0
+torchvision==0.22.0
+torchaudio==2.7.0

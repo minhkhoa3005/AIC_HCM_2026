@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from pathlib import Path
 
 from adapters import ClipTextEncoder
@@ -41,14 +42,20 @@ def _read_query_files(input_dir: Path) -> list[tuple[str, str, str]]:
     if not input_dir.is_dir():
         raise FileNotFoundError(f"Query directory not found: {input_dir}")
     rows: list[tuple[str, str, str]] = []
-    for path in sorted(input_dir.glob("*.txt")):
+    paths = sorted(
+        path for path in input_dir.iterdir()
+        if path.is_file()
+        and path.suffix.lower() in {".txt", ".csv"}
+        and re.search(r"-(kis|qa|trake)$", path.stem, flags=re.IGNORECASE)
+    )
+    for path in paths:
         query = path.read_text(encoding="utf-8-sig").strip()
         if not query:
             raise ValueError(f"Query file is empty: {path}")
         task_type = infer_task_type_from_name(path.stem)
         rows.append((path.stem, query, task_type.value))
     if not rows:
-        raise ValueError(f"No .txt query files found in {input_dir}")
+        raise ValueError(f"No query-*-kis/qa/trake.txt or .csv files found in {input_dir}")
     return rows
 
 

@@ -89,6 +89,11 @@ class ClipTextEncoder:
     @staticmethod
     def _resolve_device(configured: str | None) -> str:
         if configured:
+            if configured.lower().startswith("cuda") and not torch.cuda.is_available():
+                raise RuntimeError(
+                    "AIC_DEVICE=cuda nhưng PyTorch hiện không có CUDA. "
+                    "Cài requirements-cuda.txt rồi kiểm tra torch.cuda.is_available()."
+                )
             return configured
         return "cuda" if torch.cuda.is_available() else "cpu"
 
