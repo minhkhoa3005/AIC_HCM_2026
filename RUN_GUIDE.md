@@ -60,8 +60,11 @@ Tạo `.env` từ `.env.example`, sau đó điền API key Gemini:
 LLM_PROVIDER=gemini
 LLM_API_KEYS=YOUR_GEMINI_API_KEY
 LLM_MODEL=gemini-2.5-flash
+LLM_VLM_MODEL=gemini-2.5-pro
 LLM_REWRITE_TEMPERATURE=0
 LLM_PLANNER_TEMPERATURE=0
+VLM_CANDIDATE_LIMIT=40
+VLM_WEIGHT=0.65
 
 AIC_ARTIFACT_DIR=video_search_bundle/clip-b32-btc-v1
 AIC_CLIP_MODEL_NAME=ViT-B/32
@@ -179,6 +182,11 @@ python run_inference.py `
 Không dùng lại `checkpoint.jsonl` của bước 5. Checkpoint đánh dấu query đã hoàn thành;
 nếu dùng lại file đó, bước 6 sẽ bỏ qua query và không gọi Gemini. Kết quả VLM nằm trong
 `outputs/results-vlm/`.
+
+`LLM_VLM_MODEL` được tách khỏi model rewrite/planner. `VLM_CANDIDATE_LIMIT` kiểm soát
+số keyframe gửi trong một lần rerank; `VLM_WEIGHT` là trọng số confidence của VLM khi
+trộn với thứ hạng CLIP/RRF. Model Pro cho chất lượng tốt hơn nhưng thường chậm và tốn
+quota hơn Flash.
 
 TRAKE hiện dùng CLIP/FAISS và dynamic programming để giữ thứ tự frame; VLM không bắt buộc.
 

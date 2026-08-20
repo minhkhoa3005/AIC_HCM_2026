@@ -117,14 +117,38 @@ def apply_vlm_rerank(
     candidate_limit: int = 30,
     vlm_weight: float = 0.5,
 ) -> list[FusedCandidate]:
-    """Apply one batched VLM call to a compact evidence shortlist."""
+    """Apply one batched VLM call while preserving the retrieval prior.
+
+    Fused RRF scores are much smaller than VLM confidence scores. Normalize the
+    shortlist prior before blending so the VLM does not win merely because its
+    score uses a different numeric scale. Missing VLM judgments keep the
+    retrieval prior instead of being assigned an artificial zero.
+    """
+    if not 0.0 <= vlm_weight <= 1.0:
+        raise ValueError("vlm_weight must be between 0 and 1")
+    if candidate_limit < 1:
+        raise ValueError("candidate_limit must be at least 1")
     shortlist = candidates[:candidate_limit]
     scores = vlm_rank_fn(query, [item.candidate for item in shortlist])
+    raw_scores = [float(item.score) for item in shortlist]
+    minimum = min(raw_scores, default=0.0)
+    maximum = max(raw_scores, default=minimum)
+
+    def retrieval_prior(value: float) -> float:
+        if maximum <= minimum:
+            return 1.0
+        return (value - minimum) / (maximum - minimum)
+
     reranked = []
     for item in shortlist:
         key = (item.candidate.video_id, item.candidate.frame_id)
-        vlm_score = max(0.0, min(1.0, float(scores.get(key, 0.0))))
-        reranked.append(item.model_copy(update={"score": (1 - vlm_weight) * item.score + vlm_weight * vlm_score}))
+        prior = retrieval_prior(float(item.score))
+        if key in scores:
+            vlm_score = max(0.0, min(1.0, float(scores[key])))
+            score = (1 - vlm_weight) * prior + vlm_weight * vlm_score
+        else:
+            score = prior
+        reranked.append(item.model_copy(update={"score": score}))
     reranked.sort(key=lambda item: item.score, reverse=True)
     remainder = candidates[candidate_limit:]
     return reranked + remainder

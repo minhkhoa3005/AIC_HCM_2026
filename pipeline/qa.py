@@ -20,6 +20,8 @@ def answer_qa(
     candidates: list[FusedCandidate],
     vqa_fn: VQAFn | None = None,
     vlm_rank_fn: VLMRankFn | None = None,
+    vlm_candidate_limit: int = 40,
+    vlm_weight: float = 0.65,
     limit: int = 100,
 ) -> list[Prediction]:
     """Create ranked QA predictions, using a VLM adapter when provided."""
@@ -36,7 +38,8 @@ def answer_qa(
             plan.question or plan.search_description,
             candidates,
             vlm_rank_fn,
-            candidate_limit=min(30, len(candidates)),
+            candidate_limit=min(vlm_candidate_limit, len(candidates)),
+            vlm_weight=vlm_weight,
         )
     evidence = select_qa_evidence(candidates, limit=min(8, limit))
     answers: dict[tuple[str, int], str] = {}

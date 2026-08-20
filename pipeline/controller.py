@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from llm.config import LLMConfig
+from llm.config import LLMConfig, get_llm_config
 from llm.planner import plan_query
 from llm.query_builder import TextEncoder, build_clip_queries, build_trake_queries
 from llm.task_types import TaskType, infer_task_type_from_name, normalize_task_type
@@ -41,10 +41,11 @@ def run_query(
     """Run rewrite -> plan -> English CLIP queries -> search -> task handler."""
 
     resolved_task_type = normalize_task_type(task_type) if task_type is not None else infer_task_type_from_name(query_id)
+    resolved_config = config or get_llm_config()
     plan = plan_query(
         query,
         task_type=resolved_task_type,
-        config=config,
+        config=resolved_config,
         rewrite_client=llm_rewrite_client,
         planner_client=llm_planner_client,
     )
@@ -81,9 +82,19 @@ def run_query(
             candidates,
             vqa_fn=vqa_fn,
             vlm_rank_fn=vlm_rank_fn,
+            vlm_candidate_limit=resolved_config.vlm_candidate_limit,
+            vlm_weight=resolved_config.vlm_weight,
             limit=100,
         )
-    return rank_kis(query_id, plan, candidates, vlm_rank_fn=vlm_rank_fn, limit=100)
+    return rank_kis(
+        query_id,
+        plan,
+        candidates,
+        vlm_rank_fn=vlm_rank_fn,
+        vlm_candidate_limit=resolved_config.vlm_candidate_limit,
+        vlm_weight=resolved_config.vlm_weight,
+        limit=100,
+    )
 
 
 def run_batch(

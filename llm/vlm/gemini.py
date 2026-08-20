@@ -75,9 +75,11 @@ def _rank_prompt(query: str, candidates: list[Candidate]) -> str:
     return (
         "You are a strict visual retrieval reranker. The images are provided in the "
         "same order as the candidate list. Judge each image against the query using "
-        "only visible evidence. Return JSON only with an items array. Each item must "
-        "contain video_id, frame_id, relevant (true/false), and confidence from 0 to 1. "
-        "Do not invent colors, identity, actions, or text.\n"
+        "only visible evidence. Return exactly one item for every candidate index, "
+        "including irrelevant items. Return JSON only with an items array. Each item "
+        "must contain index, video_id, frame_id, relevant (true/false), and confidence "
+        "from 0 to 1. Keep the supplied IDs unchanged. Do not invent colors, identity, "
+        "actions, or text.\n"
         f"Query: {query}\nCandidates: {json.dumps(rows, ensure_ascii=False)}"
     )
 
@@ -88,7 +90,17 @@ def _parse_rank_response(payload: dict[str, Any], candidates: list[Candidate]) -
     for row in payload.get("items", []):
         if not isinstance(row, dict):
             continue
-        key = (str(row.get("video_id", "")), int(row.get("frame_id", -1)))
+        try:
+            row_index = int(row.get("index", -1))
+        except (TypeError, ValueError):
+            row_index = -1
+        try:
+            key = (str(row.get("video_id", "")), int(row.get("frame_id", -1)))
+        except (TypeError, ValueError):
+            key = ("", -1)
+        if key not in by_key and 0 <= row_index < len(candidates):
+            candidate = candidates[row_index]
+            key = (candidate.video_id, candidate.frame_id)
         if key not in by_key:
             continue
         try:

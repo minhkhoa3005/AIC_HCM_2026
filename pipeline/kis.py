@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from llm.schemas import QueryPlan
+from llm.query_builder import build_rerank_text
 
 from .prediction import Prediction
 from .rerank import VLMRankFn, apply_vlm_rerank, rerank_candidates, temporal_nms
@@ -14,6 +15,8 @@ def rank_kis(
     candidates: list,
     *,
     vlm_rank_fn: VLMRankFn | None = None,
+    vlm_candidate_limit: int = 40,
+    vlm_weight: float = 0.65,
     limit: int = 100,
 ) -> list[Prediction]:
     """Return Top-k keyframe predictions for a visual retrieval query."""
@@ -24,10 +27,11 @@ def rank_kis(
     )
     if vlm_rank_fn is not None:
         ranked = apply_vlm_rerank(
-            plan.search_description,
+            build_rerank_text(plan),
             ranked,
             vlm_rank_fn,
-            candidate_limit=min(30, len(ranked)),
+            candidate_limit=min(vlm_candidate_limit, len(ranked)),
+            vlm_weight=vlm_weight,
         )
     return [
         Prediction(

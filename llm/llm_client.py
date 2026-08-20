@@ -154,7 +154,7 @@ def _generate_multimodal_content(
         mime_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
         contents.append(types.Part.from_bytes(data=path.read_bytes(), mime_type=mime_type))
     return client.models.generate_content(
-        model=config.llm_model,
+        model=config.llm_vlm_model,
         contents=contents,
         config=_build_generation_config(0.0),
     )

@@ -34,8 +34,11 @@ class LLMConfig:
     llm_provider: str
     llm_api_keys: tuple[str, ...]
     llm_model: str
+    llm_vlm_model: str
     llm_rewrite_temperature: float
     llm_planner_temperature: float
+    vlm_candidate_limit: int
+    vlm_weight: float
 
 
 def get_llm_config(load_env: bool = True) -> LLMConfig:
@@ -50,10 +53,14 @@ def get_llm_config(load_env: bool = True) -> LLMConfig:
         if key.strip()
     )
 
+    llm_model = os.getenv("LLM_MODEL", "gemini-2.5-flash")
     return LLMConfig(
         llm_provider=os.getenv("LLM_PROVIDER", "gemini").strip().lower(),
         llm_api_keys=api_keys,
-        llm_model=os.getenv("LLM_MODEL", "gemini-2.5-flash"),
+        llm_model=llm_model,
+        llm_vlm_model=os.getenv("LLM_VLM_MODEL", llm_model).strip(),
         llm_rewrite_temperature=float(os.getenv("LLM_REWRITE_TEMPERATURE", "0")),
         llm_planner_temperature=float(os.getenv("LLM_PLANNER_TEMPERATURE", "0")),
+        vlm_candidate_limit=max(1, int(os.getenv("VLM_CANDIDATE_LIMIT", "40"))),
+        vlm_weight=min(1.0, max(0.0, float(os.getenv("VLM_WEIGHT", "0.65")))),
     )
