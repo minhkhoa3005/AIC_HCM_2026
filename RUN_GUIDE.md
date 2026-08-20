@@ -10,7 +10,6 @@ LLM/
 ├── run_inference.py
 ├── inputs/
 ├── outputs/
-├── answer/
 ├── Keyframes/
 └── video_search_bundle/clip-b32-btc-v1/
     ├── artifact_manifest.json
@@ -175,74 +174,7 @@ nếu dùng lại file đó, bước 6 sẽ bỏ qua query và không gọi Gemi
 
 TRAKE hiện dùng CLIP/FAISS và dynamic programming để giữ thứ tự frame; VLM không bắt buộc.
 
-## 7. Chuẩn bị đáp án đúng
-
-Đặt đáp án BTC trong `answer/`, cùng query stem với file input:
-
-```text
-answer/
-├── query-1-kis.txt
-├── query-2-qa.txt
-└── query-4-trake.txt
-```
-
-KIS/QA:
-
-```text
-Video ID: L21_V001
-Timestamp: 03:46 - 03:50
-Frame Range: [5650, 5750]
-```
-
-QA thêm:
-
-```text
-Answer: màu xanh
-```
-
-TRAKE:
-
-```text
-Video ID: L21_V001
-Event 1: [6700, 6750]
-Event 2: [6775, 6825]
-Event 3: [7425, 7475]
-```
-
-Frame range được tính bao gồm cả hai đầu mút.
-
-## 8. Chấm điểm local
-
-```powershell
-python answer/evaluate.py `
-  --answer-dir answer `
-  --result-dir outputs/results `
-  --report outputs/evaluation_report.json
-```
-
-Evaluator ghi:
-
-```text
-R@1
-R@5
-R@20
-R@50
-R@100
-Final Score
-```
-
-Ngoài ra báo cáo có `first_hit_rank`, `correct_ranks` và `correct_predictions` để biết frame đúng nằm ở Top nào.
-
-Để chấm kết quả có VLM, đổi thư mục kết quả và tên báo cáo:
-
-```powershell
-python answer/evaluate.py `
-  --answer-dir answer `
-  --result-dir outputs/results-vlm `
-  --report outputs/evaluation-vlm.json
-```
-
-## 9. Chế độ CSV cũ
+## 7. Chế độ CSV cũ
 
 Có thể chạy một file CSV thay vì thư mục `.txt`:
 
@@ -262,7 +194,7 @@ QA_001,Người phụ nữ mặc áo màu gì?,QA
 TRAKE_001,Người bước vào rồi ngồi xuống,TRAKE
 ```
 
-## 10. Kiểm tra nhanh khi lỗi
+## 8. Kiểm tra nhanh khi lỗi
 
 - `LLM_API_KEYS is required`: chưa điền API key trong `.env`.
 - `Missing CLIP manifest`: sai `AIC_ARTIFACT_DIR`.
