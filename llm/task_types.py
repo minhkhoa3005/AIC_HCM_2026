@@ -7,6 +7,7 @@ from pathlib import Path
 class TaskType(str, Enum):
     TEXTUAL_KIS = "TEXTUAL_KIS"
     QA = "QA"
+    TRAKE = "TRAKE"
 
 
 def normalize_task_type(value: TaskType | str) -> TaskType:
@@ -23,6 +24,7 @@ def normalize_task_type(value: TaskType | str) -> TaskType:
         "QA": TaskType.QA,
         "Q_A": TaskType.QA,
         "QUESTION_ANSWERING": TaskType.QA,
+        "TRAKE": TaskType.TRAKE,
     }
     try:
         return aliases[normalized]
@@ -41,6 +43,8 @@ def infer_task_type_from_name(name: str) -> TaskType:
         return TaskType.QA
     if "KIS" in tokens or "TEXTUAL_KIS" in stem or stem.startswith("KIS") or stem.endswith("KIS"):
         return TaskType.TEXTUAL_KIS
+    if "TRAKE" in tokens or stem.startswith("TRAKE") or stem.endswith("TRAKE"):
+        return TaskType.TRAKE
 
     raise ValueError(
         f"Cannot infer task type from {name!r}. Put KIS or QA in the filename/query_id, "

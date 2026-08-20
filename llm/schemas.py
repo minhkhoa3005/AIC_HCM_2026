@@ -66,6 +66,8 @@ class QueryPlan(BaseModel):
     metadata_keywords: list[str] = Field(default_factory=list)
     visual_hints: VisualHints = Field(default_factory=VisualHints)
     clip_queries: list[str] = Field(default_factory=list)
+    events: list[str] = Field(default_factory=list)
+    event_queries: list[str] = Field(default_factory=list)
 
 
 class Candidate(BaseModel):

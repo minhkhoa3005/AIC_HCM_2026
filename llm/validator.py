@@ -18,6 +18,8 @@ LIST_FIELDS = (
     "metadata_keywords",
     "expansions",
     "clip_queries",
+    "events",
+    "event_queries",
 )
 
 VISUAL_LIST_FIELDS = (
@@ -114,6 +116,15 @@ def _validate_task_invariants(plan: QueryPlan) -> None:
     if plan.task_type == TaskType.QA:
         if not plan.question or not plan.question.strip():
             raise ValueError("QA plans must contain a non-empty question")
+        return
+
+    if plan.task_type == TaskType.TRAKE:
+        if len(plan.events) < 2:
+            raise ValueError("TRAKE plans must contain at least two ordered events")
+        if len(plan.event_queries) != len(plan.events):
+            raise ValueError("TRAKE requires one English event_query per event")
+        if any(not query.strip() or not query.isascii() for query in plan.event_queries):
+            raise ValueError("TRAKE event_queries must be non-empty English ASCII")
         return
 
     raise ValueError(f"Unsupported task_type: {plan.task_type}")

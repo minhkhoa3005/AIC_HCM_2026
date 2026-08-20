@@ -118,7 +118,15 @@ def plan_query(
 OUTPUT CONTRACT OVERRIDE:
 - Return an English ASCII `anchor` that is the closest literal visual translation.
 - Return exactly 10 distinct English ASCII `expansions`.
-- Do not rely on `clip_queries`; downstream code derives three retrieval queries.
+ - Do not rely on `clip_queries`; downstream code derives three retrieval queries.
+"""
+    prompt += """
+
+TRAKE CONTRACT:
+- If TASK_TYPE_FROM_FILENAME is TRAKE, return at least two ordered `events`
+  and exactly one English ASCII `event_queries` item per event.
+- Each event query must describe only that event and preserve event order.
+- For TEXTUAL_KIS and QA, return `events: []` and `event_queries: []`.
 """
     raw_plan = generate_llm_json(
         prompt,

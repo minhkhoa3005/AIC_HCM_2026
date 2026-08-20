@@ -25,6 +25,15 @@ def build_clip_queries(plan: QueryPlan, text_encoder: TextEncoder | None = None)
     return [anchor, *select_expansions(anchor, expansions, text_encoder=text_encoder)]
 
 
+def build_trake_queries(plan: QueryPlan) -> list[str]:
+    """Return one literal English visual query for each ordered TRAKE event."""
+    if plan.task_type.value != "TRAKE":
+        raise ValueError("build_trake_queries requires a TRAKE plan")
+    if len(plan.events) < 2 or len(plan.event_queries) != len(plan.events):
+        raise ValueError("TRAKE events and event_queries must have the same length >= 2")
+    return [_validate_english(query, f"event_queries[{index}]") for index, query in enumerate(plan.event_queries)]
+
+
 def select_expansions(anchor: str, expansions: list[str], *, text_encoder: TextEncoder | None = None, count: int = 2, mmr_lambda: float = 0.72) -> list[str]:
     """Select relevant but diverse expansions using CLIP-style MMR/FQS."""
     if not 0 < count <= len(expansions):

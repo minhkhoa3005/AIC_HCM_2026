@@ -7,7 +7,7 @@ from typing import Any
 
 from llm.config import LLMConfig
 from llm.planner import plan_query
-from llm.query_builder import TextEncoder, build_clip_queries
+from llm.query_builder import TextEncoder, build_clip_queries, build_trake_queries
 from llm.task_types import TaskType, infer_task_type_from_name, normalize_task_type
 from retrieval.contract import search_clip_text, validate_retrieval_results
 from retrieval.models import QueryRetrievalResult
@@ -17,6 +17,7 @@ from .kis import rank_kis
 from .prediction import Prediction
 from .qa import VQAFn, answer_qa
 from .rerank import DEFAULT_RRF_WEIGHTS, VLMRankFn, fuse_retrieval_results
+from .trake import align_trake
 
 SearchFn = Callable[[list[str], int], list[QueryRetrievalResult]]
 
@@ -47,7 +48,11 @@ def run_query(
         rewrite_client=llm_rewrite_client,
         planner_client=llm_planner_client,
     )
-    clip_queries = build_clip_queries(plan, text_encoder=text_encoder)
+    clip_queries = (
+        build_trake_queries(plan)
+        if plan.task_type == TaskType.TRAKE
+        else build_clip_queries(plan, text_encoder=text_encoder)
+    )
     coarse_top_k = max(200, top_k)
     cache_key = (tuple(clip_queries), coarse_top_k)
     if search_cache is not None and cache_key in search_cache:
@@ -58,6 +63,9 @@ def run_query(
         )
         if search_cache is not None:
             search_cache[cache_key] = retrieval_results
+
+    if plan.task_type == TaskType.TRAKE:
+        return align_trake(query_id, plan, retrieval_results)
 
     candidates = fuse_retrieval_results(
         retrieval_results,
