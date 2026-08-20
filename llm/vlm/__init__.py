@@ -1,5 +1,6 @@
-"""Gemini Vision adapters for KIS and QA."""
+"""Vision adapters for KIS and QA."""
 
 from .gemini import GeminiVLM
+from .local import LocalVLM
 
-__all__ = ["GeminiVLM"]
+__all__ = ["GeminiVLM", "LocalVLM"]

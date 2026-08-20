@@ -54,13 +54,22 @@ bản CPU, đặt `AIC_DEVICE=cpu` trong `.env` thay vì `cuda`.
 
 ## 3. Cấu hình `.env`
 
-Tạo `.env` từ `.env.example`, sau đó điền API key Gemini:
+Tạo `.env` từ `.env.example`, sau đó điền API key Gemini cho Rewrite và Planner.
+VLM reranking/QA chạy local mặc định:
 
 ```env
 LLM_PROVIDER=gemini
 LLM_API_KEYS=YOUR_GEMINI_API_KEY
 LLM_MODEL=gemini-2.5-flash
 LLM_VLM_MODEL=gemini-3.1-pro-preview
+VLM_PROVIDER=local
+VLM_LOCAL_MODEL=Qwen/Qwen3-VL-2B-Instruct
+VLM_LOCAL_DEVICE=cuda
+VLM_LOCAL_LOAD_IN_4BIT=true
+VLM_LOCAL_BATCH_SIZE=8
+VLM_LOCAL_MAX_NEW_TOKENS=192
+VLM_LOCAL_MIN_PIXELS=200704
+VLM_LOCAL_MAX_PIXELS=401408
 LLM_REWRITE_TEMPERATURE=0
 LLM_PLANNER_TEMPERATURE=0
 VLM_CANDIDATE_LIMIT=40
@@ -154,9 +163,17 @@ Checkpoint cho phép chạy tiếp các query chưa hoàn thành:
 outputs/checkpoint.jsonl
 ```
 
-## 6. Bật Gemini VLM
+## 6. Bật VLM local
 
-VLM dùng ảnh keyframe để rerank KIS hoặc trả lời QA. Đặt ảnh theo cấu trúc:
+VLM dùng ảnh keyframe để rerank KIS hoặc trả lời QA. Với cấu hình mặc định,
+Qwen3-VL chạy local và không tiêu quota Gemini. Cài thêm dependency cho chế độ
+4-bit:
+
+```powershell
+python -m pip install -r requirements-local-vlm.txt
+```
+
+Đặt ảnh theo cấu trúc:
 
 ```text
 Keyframes/
@@ -180,13 +197,15 @@ python run_inference.py `
 ```
 
 Không dùng lại `checkpoint.jsonl` của bước 5. Checkpoint đánh dấu query đã hoàn thành;
-nếu dùng lại file đó, bước 6 sẽ bỏ qua query và không gọi Gemini. Kết quả VLM nằm trong
+nếu dùng lại file đó, bước 6 sẽ bỏ qua query và không gọi VLM. Kết quả VLM nằm trong
 `outputs/results-vlm/`.
 
-`LLM_VLM_MODEL` được tách khỏi model rewrite/planner. `VLM_CANDIDATE_LIMIT` kiểm soát
-số keyframe gửi trong một lần rerank; `VLM_WEIGHT` là trọng số confidence của VLM khi
-trộn với thứ hạng CLIP/RRF. Model Pro cho chất lượng tốt hơn nhưng thường chậm và tốn
-quota hơn Flash.
+`VLM_LOCAL_BATCH_SIZE` giới hạn số ảnh local xử lý trong một lượt để tránh tràn VRAM.
+`VLM_CANDIDATE_LIMIT` kiểm soát số keyframe được rerank; `VLM_WEIGHT` là trọng số
+confidence của VLM khi trộn với CLIP/RRF.
+
+Nếu cần dùng Gemini cho VLM, đổi `VLM_PROVIDER=gemini`; khi đó `LLM_VLM_MODEL`
+và `LLM_API_KEYS` sẽ được sử dụng. Cấu hình này là tùy chọn, không cần cho VLM local.
 
 TRAKE hiện dùng CLIP/FAISS và dynamic programming để giữ thứ tự frame; VLM không bắt buộc.
 

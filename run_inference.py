@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from adapters import ClipTextEncoder
-from llm.config import load_project_env
+from llm.config import get_llm_config, load_project_env
 from pipeline import run_batch
 from pipeline.checkpoint import QueryCheckpoint
 from retrieval.bundle import LocalBundleRetriever
@@ -82,21 +82,34 @@ def main() -> None:
     parser.add_argument("--output-dir", default="outputs/results", help="Per-query result directory for --input-dir")
     parser.add_argument("--checkpoint", default="outputs/checkpoint.jsonl")
     parser.add_argument("--top-k", type=int, default=100)
-    parser.add_argument("--with-vlm", action="store_true", help="Enable Gemini VLM reranking and QA")
+    parser.add_argument(
+        "--with-vlm",
+        action="store_true",
+        help="Enable the configured local/API VLM for reranking and QA",
+    )
     args = parser.parse_args()
 
     if bool(args.queries) == bool(args.input_dir):
         parser.error("Provide exactly one of --queries or --input-dir")
 
     load_project_env()
+    config = get_llm_config(load_env=False)
     encoder = ClipTextEncoder.from_env()
     retriever = LocalBundleRetriever.from_env(encoder.encode_one)
     checkpoint = QueryCheckpoint(args.checkpoint)
     vlm = None
     if args.with_vlm:
-        from llm.vlm import GeminiVLM
+        from llm.vlm import GeminiVLM, LocalVLM
 
-        vlm = GeminiVLM()
+        if config.vlm_provider == "local":
+            vlm = LocalVLM(config)
+        elif config.vlm_provider == "gemini":
+            vlm = GeminiVLM(config)
+        else:
+            raise ValueError(
+                f"Unsupported VLM_PROVIDER={config.vlm_provider!r}; "
+                "use 'local' or 'gemini'."
+            )
 
     query_rows = _read_query_files(Path(args.input_dir)) if args.input_dir else _read_queries(Path(args.queries))
     new_predictions = run_batch(
@@ -104,6 +117,7 @@ def main() -> None:
         top_k=args.top_k,
         search_fn=retriever.search_many,
         checkpoint=checkpoint,
+        config=config,
         text_encoder=encoder.encode_many,
         vlm_rank_fn=vlm.rank if vlm else None,
         vqa_fn=vlm.answer if vlm else None,
