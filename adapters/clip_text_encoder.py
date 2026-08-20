@@ -20,8 +20,17 @@ class _LoRALinear(nn.Module):
         self.rank = rank
         self.alpha = alpha
         self.scaling = alpha / rank
-        self.lora_A = nn.Parameter(torch.empty(original.in_features, rank))
-        self.lora_B = nn.Parameter(torch.zeros(rank, original.out_features))
+        # CLIP is already placed on the requested device when LoRA is injected.
+        # Create adapter parameters there as well; otherwise CUDA inference mixes
+        # the CUDA base weights with CPU LoRA matrices.
+        device = original.weight.device
+        dtype = original.weight.dtype
+        self.lora_A = nn.Parameter(
+            torch.empty(original.in_features, rank, device=device, dtype=dtype)
+        )
+        self.lora_B = nn.Parameter(
+            torch.zeros(rank, original.out_features, device=device, dtype=dtype)
+        )
         nn.init.kaiming_uniform_(self.lora_A, a=5**0.5)
         self.original.weight.requires_grad_(False)
         if self.original.bias is not None:
