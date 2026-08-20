@@ -20,7 +20,7 @@ Có đúng 2 lần gọi LLM: `rewrite_query_with_llm()` và `plan_query()`. `ta
 ## Các gói mã nguồn
 
 ```text
-llm/          Rewrite, lập QueryPlan, validate, cấu hình Gemini và xoay API key
+llm/          Rewrite, lập QueryPlan, validate và sinh JSON bằng model local
 retrieval/    Kiểu dữ liệu retrieval, interface CLIP và mock dùng offline
 pipeline/     Điều phối đơn/lô truy vấn, RRF rerank, QA, checkpoint JSONL
 submission/   Prediction, override thủ công và xuất CSV có cấu hình
@@ -38,7 +38,10 @@ metadata trước khi đưa kết quả vào Weighted RRF.
 
 ## Cấu hình và tài liệu kèm theo
 
-Sao chép `.env.example` thành `.env` và đặt khóa theo biến duy nhất `LLM_API_KEYS` (phân cách bằng dấu phẩy). Provider hiện tại là Gemini (`google-genai`). `requirements.txt` chứa các phụ thuộc Python.
+Sao chép `.env.example` thành `.env`. Toàn bộ Rewrite, Planner, reranking và QA
+chạy bằng model local trên CUDA; không cần API key. `requirements.txt` là file
+dependency duy nhất và bao gồm CUDA PyTorch, CLIP, Transformers, Accelerate và
+bitsandbytes.
 
 `testlist.txt` là bộ truy vấn mẫu QA và TEXTUAL_KIS; `test.txt` là lệnh chạy thử thủ công. Các PDF, ảnh và ghi chú ở thư mục gốc là tài liệu/tham chiếu dự án, không phải mã nguồn chạy.
 

@@ -37,11 +37,8 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-Nếu dùng GPU NVIDIA, cài bộ phụ thuộc CUDA:
-
-```powershell
-python -m pip install -r requirements.txt
-```
+`requirements.txt` đã bao gồm CUDA PyTorch, Transformers, Accelerate,
+bitsandbytes và các dependency của CLIP/VLM.
 
 Luôn chạy lệnh cài đặt bằng đúng Python/virtual environment dùng để chạy
 `run_inference.py`. Chương trình sẽ từ chối khởi động nếu `.env` yêu cầu CUDA
@@ -58,20 +55,17 @@ bản CPU, đặt `AIC_DEVICE=cpu` trong `.env` thay vì `cuda`.
 
 ## 3. Cấu hình `.env`
 
-Tạo `.env` từ `.env.example`, sau đó điền API key Gemini cho Rewrite và Planner.
-VLM reranking/QA chạy local mặc định:
+Tạo `.env` từ `.env.example`. Toàn bộ Rewrite, Planner, reranking và QA đều chạy local:
 
 ```env
-LLM_PROVIDER=gemini
-LLM_API_KEYS=YOUR_GEMINI_API_KEY
-LLM_MODEL=gemini-2.5-flash
-LLM_VLM_MODEL=gemini-3.1-pro-preview
+LLM_PROVIDER=local
 VLM_PROVIDER=local
-VLM_LOCAL_MODEL=Qwen/Qwen3-VL-2B-Instruct
-VLM_LOCAL_DEVICE=cuda
-VLM_LOCAL_LOAD_IN_4BIT=true
+LOCAL_MODEL=Qwen/Qwen3-VL-2B-Instruct
+LOCAL_DEVICE=cuda
+LOCAL_LOAD_IN_4BIT=true
 VLM_LOCAL_BATCH_SIZE=8
 VLM_LOCAL_MAX_NEW_TOKENS=192
+LLM_LOCAL_MAX_NEW_TOKENS=768
 VLM_LOCAL_MIN_PIXELS=200704
 VLM_LOCAL_MAX_PIXELS=401408
 LLM_REWRITE_TEMPERATURE=0
@@ -86,13 +80,7 @@ AIC_DEVICE=cuda
 AIC_KEYFRAMES_ROOT=Keyframes
 ```
 
-Có thể khai báo nhiều key, phân tách bằng dấu phẩy:
-
-```env
-LLM_API_KEYS=KEY_1,KEY_2,KEY_3
-```
-
-Không commit `.env` và không ghi API key vào source code.
+Không cần API key. Không commit `.env` vào source code.
 
 ## 4. Chuẩn bị query
 
@@ -170,8 +158,8 @@ outputs/checkpoint.jsonl
 ## 6. Bật VLM local
 
 VLM dùng ảnh keyframe để rerank KIS hoặc trả lời QA. Với cấu hình mặc định,
-Qwen3-VL chạy local và không tiêu quota Gemini. Cài thêm dependency cho chế độ
-4-bit:
+Qwen3-VL chạy local bằng CUDA và không gọi API. Dependency cho chế độ 4-bit
+đã nằm trong `requirements.txt`:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -208,9 +196,6 @@ nếu dùng lại file đó, bước 6 sẽ bỏ qua query và không gọi VLM.
 `VLM_CANDIDATE_LIMIT` kiểm soát số keyframe được rerank; `VLM_WEIGHT` là trọng số
 confidence của VLM khi trộn với CLIP/RRF.
 
-Nếu cần dùng Gemini cho VLM, đổi `VLM_PROVIDER=gemini`; khi đó `LLM_VLM_MODEL`
-và `LLM_API_KEYS` sẽ được sử dụng. Cấu hình này là tùy chọn, không cần cho VLM local.
-
 TRAKE hiện dùng CLIP/FAISS và dynamic programming để giữ thứ tự frame; VLM không bắt buộc.
 
 ## 7. Chế độ CSV cũ
@@ -235,7 +220,6 @@ TRAKE_001,Người bước vào rồi ngồi xuống,TRAKE
 
 ## 8. Kiểm tra nhanh khi lỗi
 
-- `LLM_API_KEYS is required`: chưa điền API key trong `.env`.
 - `Missing CLIP manifest`: sai `AIC_ARTIFACT_DIR`.
 - `LoRA manifest requires ...`: kiểm tra `AIC_USE_LORA=true` và `lora_weights.pt`.
 - VLM không tìm thấy ảnh: kiểm tra `AIC_KEYFRAMES_ROOT` và đường dẫn keyframe.

@@ -1,8 +1,4 @@
-"""Shared LLM client adapter.
-
-The application layer uses generic LLM names, while the current backend adapter
-uses Google Gemini through ``google-genai``.
-"""
+"""Local JSON generation for rewrite, planning, reranking, and QA."""
 
 from __future__ import annotations
 
@@ -12,9 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from .config import LLMConfig
-from .providers.key_pool import APIKeyPool
-
-_KEY_POOLS: dict[tuple[str, tuple[str, ...]], APIKeyPool] = {}
 
 
 def generate_llm_json(
@@ -23,28 +16,17 @@ def generate_llm_json(
     temperature: float,
     client: Any | None = None,
 ) -> dict[str, Any]:
-    """Generate and parse a JSON object from the configured LLM provider."""
+    """Generate text-only JSON with the shared local model."""
 
     if client is not None:
-        response = _generate_content(client, prompt, config, temperature)
-    else:
-        response = _generate_content_with_key_rotation(prompt, config, temperature)
-    response_text = _response_text(response)
-    payload = _parse_json_response(response_text)
-    if isinstance(payload, list):
-        # Some model/API combinations return several valid alternatives even
-        # when the prompt requests one object. Keep the first deterministic
-        # object; rewrite/planner validation still checks its schema strictly.
-        objects = [item for item in payload if isinstance(item, dict)]
-        if objects:
-            payload = objects[0]
-    if not isinstance(payload, dict):
-        preview = " ".join(response_text.split())[:240]
+        raise ValueError("External LLM clients are disabled; use the local model")
+    if config.llm_provider != "local":
         raise ValueError(
-            "LLM response must be a JSON object; "
-            f"received {type(payload).__name__}: {preview!r}"
+            f"Only local inference is supported; set LLM_PROVIDER=local, got {config.llm_provider!r}"
         )
-    return payload
+    from .vlm.local import get_local_vlm
+
+    return get_local_vlm(config).generate_text_json(prompt)
 
 
 def generate_vlm_json(
@@ -53,46 +35,25 @@ def generate_vlm_json(
     config: LLMConfig,
     client: Any | None = None,
 ) -> dict[str, Any]:
-    """Generate JSON from Gemini using a text prompt plus local images."""
+    """Generate multimodal JSON with the shared local model."""
+
     if client is not None:
-        response = _generate_multimodal_content(client, prompt, image_paths, config)
-    else:
-        response = _generate_multimodal_with_key_rotation(prompt, image_paths, config)
-    response_text = _response_text(response)
-    payload = _parse_json_response(response_text)
-    if isinstance(payload, list):
-        objects = [item for item in payload if isinstance(item, dict)]
-        if objects:
-            payload = objects[0]
-    if not isinstance(payload, dict):
-        preview = " ".join(response_text.split())[:240]
+        raise ValueError("External VLM clients are disabled; use the local model")
+    if config.vlm_provider != "local":
         raise ValueError(
-            "VLM response must be a JSON object; "
-            f"received {type(payload).__name__}: {preview!r}"
+            f"Only local inference is supported; set VLM_PROVIDER=local, got {config.vlm_provider!r}"
         )
-    return payload
+    from .vlm.local import get_local_vlm
+
+    return get_local_vlm(config)._generate_json(prompt, image_paths)
 
 
 def _build_llm_client_for_key(config: LLMConfig, api_key: str) -> Any:
-    if config.llm_provider != "gemini":
-        raise ValueError(f"Unsupported LLM_PROVIDER {config.llm_provider!r}")
-    try:
-        from google import genai
-    except ImportError as exc:  # pragma: no cover - depends on local install
-        raise ImportError(
-            "google-genai is required for the configured LLM provider."
-        ) from exc
-
-    return genai.Client(api_key=api_key)
+    raise RuntimeError("External API inference is disabled; use the local model")
 
 
-def _get_key_pool(keys: tuple[str, ...], model: str) -> APIKeyPool:
-    """Keep cooldown state separate for text and multimodal models."""
-
-    pool_key = (model, keys)
-    if pool_key not in _KEY_POOLS:
-        _KEY_POOLS[pool_key] = APIKeyPool(list(keys))
-    return _KEY_POOLS[pool_key]
+def _get_key_pool(keys: tuple[str, ...], model: str) -> Any:
+    raise RuntimeError("External API inference is disabled; use the local model")
 
 
 def _generate_content_with_key_rotation(
@@ -101,7 +62,7 @@ def _generate_content_with_key_rotation(
     temperature: float,
 ) -> Any:
     if not config.llm_api_keys:
-        raise ValueError("LLM_API_KEYS is required when an LLM feature is enabled")
+        raise RuntimeError("External API inference is disabled; use the local model")
 
     pool = _get_key_pool(config.llm_api_keys, config.llm_model)
     last_error: Exception | None = None
@@ -134,8 +95,14 @@ def _generate_multimodal_with_key_rotation(
     image_paths: list[str],
     config: LLMConfig,
 ) -> Any:
+    raise RuntimeError("External API inference is disabled; use the local model")
+
+    raise RuntimeError("External API inference is disabled; use the local model")
+
+    raise RuntimeError("External API inference is disabled; use the local model")
+
     if not config.llm_api_keys:
-        raise ValueError("LLM_API_KEYS is required when a VLM feature is enabled")
+        raise RuntimeError("External API inference is disabled; use the local model")
 
     pool = _get_key_pool(config.llm_api_keys, config.llm_vlm_model)
     last_error: Exception | None = None
@@ -182,10 +149,16 @@ def _generate_multimodal_content(
     image_paths: list[str],
     config: LLMConfig,
 ) -> Any:
+    raise RuntimeError("External API inference is disabled; use the local model")
+
+    raise RuntimeError("External API inference is disabled; use the local model")
+
+    raise RuntimeError("External API inference is disabled; use the local model")
+
     try:
         from google.genai import types
     except ImportError as exc:  # pragma: no cover - depends on local install
-        raise ImportError("google-genai is required for Gemini VLM") from exc
+        raise RuntimeError("External API inference is disabled; use the local model") from exc
 
     contents: list[Any] = [prompt]
     for image_path in image_paths:

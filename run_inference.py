@@ -109,7 +109,7 @@ def main() -> None:
     parser.add_argument(
         "--with-vlm",
         action="store_true",
-        help="Enable the configured local/API VLM for reranking and QA",
+        help="Enable the local VLM for reranking and QA",
     )
     args = parser.parse_args()
 
@@ -118,23 +118,20 @@ def main() -> None:
 
     load_project_env()
     config = get_llm_config(load_env=False)
+    if config.llm_provider != "local" or config.vlm_provider != "local":
+        raise RuntimeError(
+            "This build uses local inference only. Set both "
+            "LLM_PROVIDER=local and VLM_PROVIDER=local in .env."
+        )
     _validate_requested_devices(with_vlm=args.with_vlm, vlm_provider=config.vlm_provider)
     encoder = ClipTextEncoder.from_env()
     retriever = LocalBundleRetriever.from_env(encoder.encode_one)
     checkpoint = QueryCheckpoint(args.checkpoint)
     vlm = None
     if args.with_vlm:
-        from llm.vlm import GeminiVLM, LocalVLM
+        from llm.vlm import get_local_vlm
 
-        if config.vlm_provider == "local":
-            vlm = LocalVLM(config)
-        elif config.vlm_provider == "gemini":
-            vlm = GeminiVLM(config)
-        else:
-            raise ValueError(
-                f"Unsupported VLM_PROVIDER={config.vlm_provider!r}; "
-                "use 'local' or 'gemini'."
-            )
+        vlm = get_local_vlm(config)
 
     query_rows = _read_query_files(Path(args.input_dir)) if args.input_dir else _read_queries(Path(args.queries))
     new_predictions = run_batch(

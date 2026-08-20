@@ -1,6 +1,5 @@
-"""Vision adapters for KIS and QA."""
+"""Local vision-language adapters for KIS and QA."""
 
-from .gemini import GeminiVLM
-from .local import LocalVLM
+from .local import LocalVLM, get_local_vlm
 
-__all__ = ["GeminiVLM", "LocalVLM"]
+__all__ = ["LocalVLM", "get_local_vlm"]

@@ -10,7 +10,26 @@ from typing import Any
 from llm.config import LLMConfig, get_llm_config
 from llm.schemas import Candidate
 
-from .gemini import _parse_rank_response, _rank_prompt
+from .common import parse_rank_response, rank_prompt
+
+
+_LOCAL_VLM_INSTANCES: dict[tuple[Any, ...], "LocalVLM"] = {}
+
+
+def get_local_vlm(config: LLMConfig | None = None) -> "LocalVLM":
+    """Return one shared local model instance for text and image prompts."""
+
+    resolved = config or get_llm_config()
+    key = (
+        resolved.local_model,
+        resolved.local_device,
+        resolved.local_load_in_4bit,
+        resolved.local_min_pixels,
+        resolved.local_max_pixels,
+    )
+    if key not in _LOCAL_VLM_INSTANCES:
+        _LOCAL_VLM_INSTANCES[key] = LocalVLM(resolved)
+    return _LOCAL_VLM_INSTANCES[key]
 
 
 class LocalVLM:
@@ -35,13 +54,13 @@ class LocalVLM:
 
         usable = [item for item in candidates if Path(item.keyframe_path).exists()]
         scores: dict[tuple[str, int], float] = {}
-        for start in range(0, len(usable), self.config.vlm_local_batch_size):
-            chunk = usable[start : start + self.config.vlm_local_batch_size]
+        for start in range(0, len(usable), self.config.local_batch_size):
+            chunk = usable[start : start + self.config.local_batch_size]
             payload = self._generate_json(
-                _rank_prompt(query, chunk),
+                rank_prompt(query, chunk),
                 [item.keyframe_path for item in chunk],
             )
-            scores.update(_parse_rank_response(payload, chunk))
+            scores.update(parse_rank_response(payload, chunk))
         self._rank_cache[key] = scores
         return scores
 
@@ -65,6 +84,15 @@ class LocalVLM:
         self._answer_cache[key] = answer
         return answer
 
+    def generate_text_json(self, prompt: str) -> dict[str, Any]:
+        """Generate a JSON object from text only using the shared local model."""
+
+        return self._generate_json(
+            prompt,
+            [],
+            max_new_tokens=self.config.local_text_max_new_tokens,
+        )
+
     def _generate_json(
         self,
         prompt: str,
@@ -78,7 +106,7 @@ class LocalVLM:
         assert self._torch is not None
 
         content = [
-            {"type": "image", "image": str(Path(image_path))}
+                {"type": "image", "image": str(Path(image_path))}
             for image_path in image_paths
         ]
         content.append({"type": "text", "text": prompt})
@@ -94,7 +122,7 @@ class LocalVLM:
         with self._torch.inference_mode():
             generated = self._model.generate(
                 **inputs,
-                max_new_tokens=max_new_tokens or self.config.vlm_local_max_new_tokens,
+                max_new_tokens=max_new_tokens or self.config.local_max_new_tokens,
                 do_sample=False,
             )
         generated_trimmed = [
@@ -128,16 +156,16 @@ class LocalVLM:
                 "support, accelerate, and torch. Install requirements.txt."
             ) from exc
 
-        if self.config.vlm_local_device.startswith("cuda") and not torch.cuda.is_available():
+        if self.config.local_device.startswith("cuda") and not torch.cuda.is_available():
             raise RuntimeError(
-                "VLM_LOCAL_DEVICE=cuda but CUDA is unavailable. "
-                "Install a CUDA PyTorch build or set VLM_LOCAL_DEVICE=cpu."
+                "LOCAL_DEVICE=cuda but CUDA is unavailable. "
+                "Install a CUDA PyTorch build or set LOCAL_DEVICE=cpu."
             )
-        if self.config.vlm_local_load_in_4bit and not torch.cuda.is_available():
-            raise RuntimeError("VLM_LOCAL_LOAD_IN_4BIT=true requires an NVIDIA CUDA device")
+        if self.config.local_load_in_4bit and not torch.cuda.is_available():
+            raise RuntimeError("LOCAL_LOAD_IN_4BIT=true requires an NVIDIA CUDA device")
 
         model_kwargs: dict[str, Any] = {"device_map": "auto", "dtype": "auto"}
-        if self.config.vlm_local_load_in_4bit:
+        if self.config.local_load_in_4bit:
             try:
                 from transformers import BitsAndBytesConfig
             except ImportError as exc:  # pragma: no cover - optional dependency guard
@@ -155,20 +183,20 @@ class LocalVLM:
 
         try:
             self._model = ModelClass.from_pretrained(
-                self.config.vlm_local_model,
+                self.config.local_model,
                 **model_kwargs,
             )
         except TypeError:
             # Older Transformers releases use torch_dtype instead of dtype.
             model_kwargs["torch_dtype"] = model_kwargs.pop("dtype")
             self._model = ModelClass.from_pretrained(
-                self.config.vlm_local_model,
+                self.config.local_model,
                 **model_kwargs,
             )
         self._processor = AutoProcessor.from_pretrained(
-            self.config.vlm_local_model,
-            min_pixels=self.config.vlm_local_min_pixels,
-            max_pixels=self.config.vlm_local_max_pixels,
+            self.config.local_model,
+            min_pixels=self.config.local_min_pixels,
+            max_pixels=self.config.local_max_pixels,
         )
         self._torch = torch
 

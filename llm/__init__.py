@@ -12,7 +12,7 @@ from .schemas import (
     VisualHints,
 )
 from .task_types import TaskType, infer_task_type_from_name, normalize_task_type
-from .vlm import GeminiVLM
+from .vlm import LocalVLM, get_local_vlm
 
 __all__ = [
     "Candidate",
@@ -30,7 +30,8 @@ __all__ = [
     "TextEncoder",
     "infer_task_type_from_name",
     "normalize_task_type",
-    "GeminiVLM",
+    "LocalVLM",
+    "get_local_vlm",
     "plan_query",
     "rewrite_query_with_llm",
     "validate_rewrite_result",
