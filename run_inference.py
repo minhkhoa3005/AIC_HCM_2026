@@ -13,6 +13,7 @@ from llm.config import load_project_env
 from pipeline import run_batch
 from pipeline.checkpoint import QueryCheckpoint
 from retrieval.bundle import LocalBundleRetriever
+from submission.btc_exporter import export_btc_csv
 from submission.csv_exporter import export_csv
 from llm.task_types import infer_task_type_from_name
 
@@ -65,12 +66,12 @@ def _write_per_query_results(predictions, query_rows, output_dir: Path) -> None:
     for prediction in predictions:
         by_query.setdefault(prediction.query_id, []).append(prediction)
     output_dir.mkdir(parents=True, exist_ok=True)
-    for query_id, _query, _task_type in query_rows:
+    for query_id, _query, raw_task_type in query_rows:
         query_predictions = by_query.get(query_id, [])
         # The input stem already contains the BTC task suffix, e.g.
         # query-1-kis.txt -> query-1-kis.csv.
         output_path = output_dir / f"{query_id}.csv"
-        export_csv(query_predictions, output_path)
+        export_btc_csv(query_predictions, output_path, task_type=raw_task_type)
         print(f"Wrote {len(query_predictions)} predictions to {output_path}")
 
 def main() -> None:

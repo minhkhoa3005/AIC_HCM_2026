@@ -137,6 +137,14 @@ outputs/results/
 └── query-4-trake.csv
 ```
 
+Các file theo query dùng định dạng nộp BTC và không có header:
+
+```text
+KIS:   video_id,frame_id
+QA:    video_id,frame_id,answer
+TRAKE: video_id,event_frame_1,event_frame_2,...
+```
+
 Checkpoint cho phép chạy tiếp các query chưa hoàn thành:
 
 ```text
