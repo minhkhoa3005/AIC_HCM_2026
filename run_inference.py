@@ -32,7 +32,7 @@ def _validate_requested_devices(*, with_vlm: bool, vlm_provider: str) -> None:
     if cuda_requested and not torch.cuda.is_available():
         raise RuntimeError(
             "CUDA was requested for a local model, but this Python environment "
-            "does not have CUDA-enabled PyTorch. Install requirements-cuda.txt "
+            "does not have CUDA-enabled PyTorch. Install requirements.txt "
             "in the active virtual environment and rerun the CUDA check."
         )
     if torch.cuda.is_available():

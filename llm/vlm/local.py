@@ -125,7 +125,7 @@ class LocalVLM:
         except ImportError as exc:  # pragma: no cover - depends on local install
             raise ImportError(
                 "Local VLM requires a recent Transformers build with Qwen3-VL "
-                "support, accelerate, and torch. Install requirements-local-vlm.txt."
+                "support, accelerate, and torch. Install requirements.txt."
             ) from exc
 
         if self.config.vlm_local_device.startswith("cuda") and not torch.cuda.is_available():
@@ -143,7 +143,7 @@ class LocalVLM:
             except ImportError as exc:  # pragma: no cover - optional dependency guard
                 raise ImportError(
                     "4-bit local VLM loading requires bitsandbytes. "
-                    "Install requirements-local-vlm.txt or set "
+                    "Install requirements.txt or set "
                     "VLM_LOCAL_LOAD_IN_4BIT=false."
                 ) from exc
             model_kwargs["quantization_config"] = BitsAndBytesConfig(

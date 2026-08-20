@@ -12,5 +12,5 @@ Keyframes/
 ```
 
 The filenames and video folders must match the paths referenced by
-`index_metadata.json`. This folder is used only by optional Gemini VLM
-reranking/QA; CLIP + FAISS retrieval does not require the images.
+`index_metadata.json`. This folder is used by the local/API VLM
+reranking/QA stage; CLIP + FAISS retrieval does not require the images.

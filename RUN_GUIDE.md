@@ -40,7 +40,7 @@ python -m pip install -r requirements.txt
 Nếu dùng GPU NVIDIA, cài bộ phụ thuộc CUDA:
 
 ```powershell
-python -m pip install -r requirements-cuda.txt
+python -m pip install -r requirements.txt
 ```
 
 Luôn chạy lệnh cài đặt bằng đúng Python/virtual environment dùng để chạy
@@ -174,7 +174,7 @@ Qwen3-VL chạy local và không tiêu quota Gemini. Cài thêm dependency cho c
 4-bit:
 
 ```powershell
-python -m pip install -r requirements-local-vlm.txt
+python -m pip install -r requirements.txt
 ```
 
 Đặt ảnh theo cấu trúc:

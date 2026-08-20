@@ -101,7 +101,7 @@ class ClipTextEncoder:
             if configured.lower().startswith("cuda") and not torch.cuda.is_available():
                 raise RuntimeError(
                     "AIC_DEVICE=cuda nhưng PyTorch hiện không có CUDA. "
-                    "Cài requirements-cuda.txt rồi kiểm tra torch.cuda.is_available()."
+                    "Cài requirements.txt rồi kiểm tra torch.cuda.is_available()."
                 )
             return configured
         return "cuda" if torch.cuda.is_available() else "cpu"

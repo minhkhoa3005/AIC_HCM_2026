@@ -1,3 +1,7 @@
+# NVIDIA/CUDA 12.6 wheels for the local CLIP and Qwen-VL models.
+--index-url https://download.pytorch.org/whl/cu126
+--extra-index-url https://pypi.org/simple
+
 pydantic>=2,<3
 pytest>=8,<9
 python-dotenv>=1,<2
@@ -6,8 +10,11 @@ packaging>=23
 google-genai>=1,<2
 numpy>=1.26,<3
 faiss-cpu>=1.8,<2
-torch>=2.1
+torch==2.7.0
+torchvision==0.22.0
+torchaudio==2.7.0
 transformers>=4.57.0
 accelerate>=1.2
+bitsandbytes>=0.45
 openai-clip>=1.0.1
 pillow>=10
