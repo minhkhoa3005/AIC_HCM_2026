@@ -60,7 +60,7 @@ def _read_query_files(input_dir: Path) -> list[tuple[str, str, str]]:
 
 
 def _write_per_query_results(predictions, query_rows, output_dir: Path) -> None:
-    """Write BTC-style one-result-file-per-query CSVs."""
+    """Write one CSV per query using the same stem as the input file."""
     by_query: dict[str, list] = {}
     for prediction in predictions:
         by_query.setdefault(prediction.query_id, []).append(prediction)
@@ -68,8 +68,8 @@ def _write_per_query_results(predictions, query_rows, output_dir: Path) -> None:
     for query_id, _query, _task_type in query_rows:
         query_predictions = by_query.get(query_id, [])
         # The input stem already contains the BTC task suffix, e.g.
-        # query-1-kis.txt -> query-1-kis-result.csv.
-        output_path = output_dir / f"{query_id}-result.csv"
+        # query-1-kis.txt -> query-1-kis.csv.
+        output_path = output_dir / f"{query_id}.csv"
         export_csv(query_predictions, output_path)
         print(f"Wrote {len(query_predictions)} predictions to {output_path}")
 

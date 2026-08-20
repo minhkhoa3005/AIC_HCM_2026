@@ -132,9 +132,9 @@ Kết quả được ghi riêng cho từng query:
 
 ```text
 outputs/results/
-├── query-1-kis-result.csv
-├── query-2-qa-result.csv
-└── query-4-trake-result.csv
+├── query-1-kis.csv
+├── query-2-qa.csv
+└── query-4-trake.csv
 ```
 
 Checkpoint cho phép chạy tiếp các query chưa hoàn thành:
