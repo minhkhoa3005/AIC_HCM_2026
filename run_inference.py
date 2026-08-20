@@ -13,6 +13,7 @@ from pipeline import run_batch
 from pipeline.checkpoint import QueryCheckpoint
 from retrieval.bundle import LocalBundleRetriever
 from submission.csv_exporter import export_csv
+from llm.task_types import infer_task_type_from_name
 
 
 def _read_queries(path: Path) -> list[tuple[str, str] | tuple[str, str, str]]:
@@ -35,14 +36,49 @@ def _read_queries(path: Path) -> list[tuple[str, str] | tuple[str, str, str]]:
         return rows
 
 
+def _read_query_files(input_dir: Path) -> list[tuple[str, str, str]]:
+    """Read BTC query package files and derive task type from each filename."""
+    if not input_dir.is_dir():
+        raise FileNotFoundError(f"Query directory not found: {input_dir}")
+    rows: list[tuple[str, str, str]] = []
+    for path in sorted(input_dir.glob("*.txt")):
+        query = path.read_text(encoding="utf-8-sig").strip()
+        if not query:
+            raise ValueError(f"Query file is empty: {path}")
+        task_type = infer_task_type_from_name(path.stem)
+        rows.append((path.stem, query, task_type.value))
+    if not rows:
+        raise ValueError(f"No .txt query files found in {input_dir}")
+    return rows
+
+
+def _write_per_query_results(predictions, query_rows, output_dir: Path) -> None:
+    """Write BTC-style one-result-file-per-query CSVs."""
+    by_query: dict[str, list] = {}
+    for prediction in predictions:
+        by_query.setdefault(prediction.query_id, []).append(prediction)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for query_id, _query, _task_type in query_rows:
+        query_predictions = by_query.get(query_id, [])
+        # The input stem already contains the BTC task suffix, e.g.
+        # query-1-kis.txt -> query-1-kis-result.csv.
+        output_path = output_dir / f"{query_id}-result.csv"
+        export_csv(query_predictions, output_path)
+        print(f"Wrote {len(query_predictions)} predictions to {output_path}")
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run independent AIC KIS/QA inference")
-    parser.add_argument("--queries", required=True, help="CSV or JSONL with query_id, query, optional task_type")
+    parser.add_argument("--queries", help="CSV or JSONL with query_id, query, optional task_type")
+    parser.add_argument("--input-dir", help="BTC query package directory containing query-*-kis/qa/trake.txt files")
     parser.add_argument("--output", default="outputs/submission.csv")
+    parser.add_argument("--output-dir", default="outputs/results", help="Per-query result directory for --input-dir")
     parser.add_argument("--checkpoint", default="outputs/checkpoint.jsonl")
     parser.add_argument("--top-k", type=int, default=100)
     parser.add_argument("--with-vlm", action="store_true", help="Enable Gemini VLM reranking and QA")
     args = parser.parse_args()
+
+    if bool(args.queries) == bool(args.input_dir):
+        parser.error("Provide exactly one of --queries or --input-dir")
 
     load_project_env()
     encoder = ClipTextEncoder.from_env()
@@ -54,8 +90,9 @@ def main() -> None:
 
         vlm = GeminiVLM()
 
+    query_rows = _read_query_files(Path(args.input_dir)) if args.input_dir else _read_queries(Path(args.queries))
     new_predictions = run_batch(
-        _read_queries(Path(args.queries)),
+        query_rows,
         top_k=args.top_k,
         search_fn=retriever.search_many,
         checkpoint=checkpoint,
@@ -66,8 +103,11 @@ def main() -> None:
     all_predictions = checkpoint.load_predictions()
     if not all_predictions:
         all_predictions = new_predictions
-    export_csv(all_predictions, args.output)
-    print(f"Wrote {len(all_predictions)} predictions to {args.output}")
+    if args.input_dir:
+        _write_per_query_results(all_predictions, query_rows, Path(args.output_dir))
+    else:
+        export_csv(all_predictions, args.output)
+        print(f"Wrote {len(all_predictions)} predictions to {args.output}")
 
 
 if __name__ == "__main__":
