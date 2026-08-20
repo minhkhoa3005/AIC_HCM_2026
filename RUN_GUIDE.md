@@ -43,6 +43,10 @@ Nếu dùng GPU NVIDIA, cài bộ phụ thuộc CUDA:
 python -m pip install -r requirements-cuda.txt
 ```
 
+Luôn chạy lệnh cài đặt bằng đúng Python/virtual environment dùng để chạy
+`run_inference.py`. Chương trình sẽ từ chối khởi động nếu `.env` yêu cầu CUDA
+nhưng PyTorch hiện tại là bản CPU.
+
 Kiểm tra CUDA:
 
 ```powershell

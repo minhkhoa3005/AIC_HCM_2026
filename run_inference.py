@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 from pathlib import Path
+
+import torch
 
 from adapters import ClipTextEncoder
 from llm.config import get_llm_config, load_project_env
@@ -16,6 +19,27 @@ from retrieval.bundle import LocalBundleRetriever
 from submission.btc_exporter import export_btc_csv
 from submission.csv_exporter import export_csv
 from llm.task_types import infer_task_type_from_name
+
+
+def _validate_requested_devices(*, with_vlm: bool, vlm_provider: str) -> None:
+    """Fail early when a CUDA configuration is paired with CPU-only PyTorch."""
+
+    clip_device = os.getenv("AIC_DEVICE", "cuda").strip().lower()
+    vlm_device = os.getenv("VLM_LOCAL_DEVICE", clip_device).strip().lower()
+    cuda_requested = clip_device.startswith("cuda") or (
+        with_vlm and vlm_provider == "local" and vlm_device.startswith("cuda")
+    )
+    if cuda_requested and not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA was requested for a local model, but this Python environment "
+            "does not have CUDA-enabled PyTorch. Install requirements-cuda.txt "
+            "in the active virtual environment and rerun the CUDA check."
+        )
+    if torch.cuda.is_available():
+        print(f"CUDA available: {torch.cuda.get_device_name(0)}")
+        print(f"CLIP device: {clip_device}")
+        if with_vlm and vlm_provider == "local":
+            print(f"Local VLM device: {vlm_device}")
 
 
 def _read_queries(path: Path) -> list[tuple[str, str] | tuple[str, str, str]]:
@@ -94,6 +118,7 @@ def main() -> None:
 
     load_project_env()
     config = get_llm_config(load_env=False)
+    _validate_requested_devices(with_vlm=args.with_vlm, vlm_provider=config.vlm_provider)
     encoder = ClipTextEncoder.from_env()
     retriever = LocalBundleRetriever.from_env(encoder.encode_one)
     checkpoint = QueryCheckpoint(args.checkpoint)
