@@ -29,9 +29,18 @@ def generate_llm_json(
         response = _generate_content(client, prompt, config, temperature)
     else:
         response = _generate_content_with_key_rotation(prompt, config, temperature)
-    payload = _parse_json_response(_response_text(response))
+    response_text = _response_text(response)
+    payload = _parse_json_response(response_text)
+    if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
+        # Some model/API combinations wrap a requested object in a one-item
+        # JSON array even when response_mime_type is application/json.
+        payload = payload[0]
     if not isinstance(payload, dict):
-        raise ValueError("LLM response must be a JSON object")
+        preview = " ".join(response_text.split())[:240]
+        raise ValueError(
+            "LLM response must be a JSON object; "
+            f"received {type(payload).__name__}: {preview!r}"
+        )
     return payload
 
 
@@ -46,9 +55,16 @@ def generate_vlm_json(
         response = _generate_multimodal_content(client, prompt, image_paths, config)
     else:
         response = _generate_multimodal_with_key_rotation(prompt, image_paths, config)
-    payload = _parse_json_response(_response_text(response))
+    response_text = _response_text(response)
+    payload = _parse_json_response(response_text)
+    if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
+        payload = payload[0]
     if not isinstance(payload, dict):
-        raise ValueError("VLM response must be a JSON object")
+        preview = " ".join(response_text.split())[:240]
+        raise ValueError(
+            "VLM response must be a JSON object; "
+            f"received {type(payload).__name__}: {preview!r}"
+        )
     return payload
 
 
@@ -186,10 +202,22 @@ def _response_text(response: Any) -> str:
 
 def _parse_json_response(text: str) -> Any:
     cleaned = text.strip()
+    if not cleaned:
+        raise ValueError("LLM returned an empty response")
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
         cleaned = re.sub(r"\s*```$", "", cleaned)
     try:
         return json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ValueError("LLM returned invalid JSON") from exc
+    except json.JSONDecodeError:
+        # Recover JSON when a provider adds a short explanation before/after
+        # the object despite the response MIME type and prompt contract.
+        decoder = json.JSONDecoder()
+        for match in re.finditer(r"[\[{]", cleaned):
+            try:
+                value, _ = decoder.raw_decode(cleaned[match.start():])
+                return value
+            except json.JSONDecodeError:
+                continue
+        preview = " ".join(cleaned.split())[:240]
+        raise ValueError(f"LLM returned invalid JSON: {preview!r}") from None
