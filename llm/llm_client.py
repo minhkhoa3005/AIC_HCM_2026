@@ -31,10 +31,13 @@ def generate_llm_json(
         response = _generate_content_with_key_rotation(prompt, config, temperature)
     response_text = _response_text(response)
     payload = _parse_json_response(response_text)
-    if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
-        # Some model/API combinations wrap a requested object in a one-item
-        # JSON array even when response_mime_type is application/json.
-        payload = payload[0]
+    if isinstance(payload, list):
+        # Some model/API combinations return several valid alternatives even
+        # when the prompt requests one object. Keep the first deterministic
+        # object; rewrite/planner validation still checks its schema strictly.
+        objects = [item for item in payload if isinstance(item, dict)]
+        if objects:
+            payload = objects[0]
     if not isinstance(payload, dict):
         preview = " ".join(response_text.split())[:240]
         raise ValueError(
@@ -57,8 +60,10 @@ def generate_vlm_json(
         response = _generate_multimodal_with_key_rotation(prompt, image_paths, config)
     response_text = _response_text(response)
     payload = _parse_json_response(response_text)
-    if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
-        payload = payload[0]
+    if isinstance(payload, list):
+        objects = [item for item in payload if isinstance(item, dict)]
+        if objects:
+            payload = objects[0]
     if not isinstance(payload, dict):
         preview = " ".join(response_text.split())[:240]
         raise ValueError(

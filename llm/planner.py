@@ -71,7 +71,8 @@ Output liên quan:
 {"task_type":"QA","question":"Người thứ hai mặc áo màu gì?","clip_queries":["four women standing side by side and holding sheets of paper in a television broadcast"]}
 Không tạo query có màu áo giả định hoặc "showing clothing details".
 
-CHỈ TRẢ VỀ JSON, không markdown/giải thích/field thừa:
+CHỈ TRẢ VỀ đúng một JSON object, không array, không nhiều phương án, không
+markdown/giải thích/field thừa:
 {
   "task_type":"TEXTUAL_KIS | QA",
   "search_description":"mô tả tiếng Việt có dấu",

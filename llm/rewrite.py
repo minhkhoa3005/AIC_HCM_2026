@@ -47,7 +47,8 @@ Quy tắc:
    uncertain_terms.
 4. rewritten_query phải dùng tiếng Việt có dấu khi có thể.
 
-Chỉ trả về JSON hợp lệ, không markdown:
+Chỉ trả về đúng một JSON object hợp lệ, không markdown, không trả về array và
+không đưa ra nhiều phương án:
 {
   "rewritten_query": "câu truy vấn tiếng Việt có dấu",
   "preserved_terms": ["tên riêng hoặc thuật ngữ cần giữ nguyên"],
