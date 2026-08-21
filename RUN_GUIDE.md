@@ -87,7 +87,8 @@ Không cần API key. Không commit `.env` vào source code.
 
 ```text
 LLM/model_cache/
-├── huggingface/hub/   # Qwen3-VL
+├── huggingface/hub/   # Qwen3-VL reconstructed model
+├── huggingface/xet/   # Hugging Face download chunks
 └── clip/              # OpenAI CLIP
 ```
 
@@ -99,8 +100,10 @@ AIC_MODEL_CACHE_DIR=E:/AIC-model-cache
 
 Nếu model đang tải vào ổ C, nhấn `Ctrl+C`, đổi biến trên rồi chạy lại. Sau khi
 model chạy thành công từ vị trí mới, cache cũ tại
-`%USERPROFILE%\.cache\huggingface\hub` có thể được di chuyển hoặc xóa thủ công
-để giải phóng ổ C.
+`%USERPROFILE%\.cache\huggingface\hub` và
+`%USERPROFILE%\.cache\huggingface\xet` có thể được di chuyển hoặc xóa thủ công
+để giải phóng ổ C. Chỉ xóa sau khi kiểm tra vị trí mới hoạt động và không còn
+model khác cần dùng trong cache cũ.
 
 Profile CPU dùng FP32, cần khoảng 10-12 GB RAM và sẽ chậm, phù hợp để kiểm tra
 luồng. Trên máy NVIDIA 8 GB VRAM, đổi các dòng sau để chạy GPU:

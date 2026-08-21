@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from llm.config import LLMConfig, get_llm_config
+from llm.config import LLMConfig, configure_huggingface_cache, get_llm_config
 from llm.schemas import Candidate
 
 from .common import parse_rank_response, rank_prompt
@@ -146,6 +146,7 @@ class LocalVLM:
         if self._model is not None:
             return
 
+        hf_cache_dir = configure_huggingface_cache(self.config.model_cache_dir)
         try:
             import torch
             from transformers import AutoProcessor
@@ -171,10 +172,7 @@ class LocalVLM:
             )
 
         model_kwargs = _base_model_load_kwargs(self.config.local_device, torch)
-        hf_cache_dir: Path | None = None
-        if self.config.model_cache_dir is not None:
-            hf_cache_dir = self.config.model_cache_dir / "huggingface" / "hub"
-            hf_cache_dir.mkdir(parents=True, exist_ok=True)
+        if hf_cache_dir is not None:
             model_kwargs["cache_dir"] = str(hf_cache_dir)
         if self.config.local_load_in_4bit:
             try:

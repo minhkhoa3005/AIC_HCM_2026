@@ -42,6 +42,23 @@ def resolve_model_cache_dir() -> Path | None:
     return path.resolve()
 
 
+def configure_huggingface_cache(cache_root: Path | None = None) -> Path | None:
+    """Route Hugging Face Hub and Xet files into the shared model cache."""
+
+    resolved = cache_root if cache_root is not None else resolve_model_cache_dir()
+    if resolved is None:
+        return None
+    hf_home = resolved / "huggingface"
+    hub_cache = hf_home / "hub"
+    xet_cache = hf_home / "xet"
+    hub_cache.mkdir(parents=True, exist_ok=True)
+    xet_cache.mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HOME"] = str(hf_home)
+    os.environ["HF_HUB_CACHE"] = str(hub_cache)
+    os.environ["HF_XET_CACHE"] = str(xet_cache)
+    return hub_cache
+
+
 @dataclass(frozen=True)
 class LLMConfig:
     """Runtime knobs for the shared local text and vision-language model."""
