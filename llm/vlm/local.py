@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from llm.config import LLMConfig, configure_huggingface_cache, get_llm_config
+from llm.config import LLMConfig, get_llm_config
 from llm.schemas import Candidate
 
 from .common import parse_rank_response, rank_prompt
@@ -22,7 +22,6 @@ def get_local_vlm(config: LLMConfig | None = None) -> "LocalVLM":
     resolved = config or get_llm_config()
     key = (
         resolved.local_model,
-        str(resolved.model_cache_dir),
         resolved.local_device,
         resolved.local_load_in_4bit,
         resolved.local_min_pixels,
@@ -146,7 +145,6 @@ class LocalVLM:
         if self._model is not None:
             return
 
-        hf_cache_dir = configure_huggingface_cache(self.config.model_cache_dir)
         try:
             import torch
             from transformers import AutoProcessor
@@ -172,8 +170,6 @@ class LocalVLM:
             )
 
         model_kwargs = _base_model_load_kwargs(self.config.local_device, torch)
-        if hf_cache_dir is not None:
-            model_kwargs["cache_dir"] = str(hf_cache_dir)
         if self.config.local_load_in_4bit:
             try:
                 from transformers import BitsAndBytesConfig
@@ -201,15 +197,10 @@ class LocalVLM:
                 self.config.local_model,
                 **model_kwargs,
             )
-        processor_kwargs: dict[str, Any] = {
-            "min_pixels": self.config.local_min_pixels,
-            "max_pixels": self.config.local_max_pixels,
-        }
-        if hf_cache_dir is not None:
-            processor_kwargs["cache_dir"] = str(hf_cache_dir)
         self._processor = AutoProcessor.from_pretrained(
             self.config.local_model,
-            **processor_kwargs,
+            min_pixels=self.config.local_min_pixels,
+            max_pixels=self.config.local_max_pixels,
         )
         self._torch = torch
 

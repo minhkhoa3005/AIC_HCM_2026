@@ -10,8 +10,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from llm.config import resolve_model_cache_dir
-
 
 class _LoRALinear(nn.Module):
     """The same linear LoRA wrapper used by video-search-agent."""
@@ -118,18 +116,7 @@ class ClipTextEncoder:
                 "Install openai-clip (and a compatible PyTorch build) to encode CLIP text."
             ) from exc
 
-        cache_root = resolve_model_cache_dir()
-        download_root = None
-        if cache_root is not None:
-            clip_cache_dir = cache_root / "clip"
-            clip_cache_dir.mkdir(parents=True, exist_ok=True)
-            download_root = str(clip_cache_dir)
-        model, _ = clip.load(
-            "ViT-B/32",
-            device=self.device,
-            jit=False,
-            download_root=download_root,
-        )
+        model, _ = clip.load("ViT-B/32", device=self.device, jit=False)
         adapter = self.manifest.get("text_encoder_adapter", "none")
         use_lora = os.getenv("AIC_USE_LORA", "false").strip().lower() == "true"
         checkpoint_path = self.bundle_dir / "lora_weights.pt"

@@ -12,9 +12,6 @@ except ImportError:  # pragma: no cover - optional dependency guard
     load_dotenv = None
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-
 def load_project_env(env_path: str | Path = ".env") -> None:
     """Load a local .env file when python-dotenv is installed."""
 
@@ -30,35 +27,6 @@ def _read_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def resolve_model_cache_dir() -> Path | None:
-    """Resolve the shared model cache relative to the project root."""
-
-    raw = os.getenv("AIC_MODEL_CACHE_DIR", "model_cache").strip()
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = PROJECT_ROOT / path
-    return path.resolve()
-
-
-def configure_huggingface_cache(cache_root: Path | None = None) -> Path | None:
-    """Route Hugging Face Hub and Xet files into the shared model cache."""
-
-    resolved = cache_root if cache_root is not None else resolve_model_cache_dir()
-    if resolved is None:
-        return None
-    hf_home = resolved / "huggingface"
-    hub_cache = hf_home / "hub"
-    xet_cache = hf_home / "xet"
-    hub_cache.mkdir(parents=True, exist_ok=True)
-    xet_cache.mkdir(parents=True, exist_ok=True)
-    os.environ["HF_HOME"] = str(hf_home)
-    os.environ["HF_HUB_CACHE"] = str(hub_cache)
-    os.environ["HF_XET_CACHE"] = str(xet_cache)
-    return hub_cache
-
-
 @dataclass(frozen=True)
 class LLMConfig:
     """Runtime knobs for the shared local text and vision-language model."""
@@ -66,7 +34,6 @@ class LLMConfig:
     llm_provider: str
     vlm_provider: str
     local_model: str
-    model_cache_dir: Path | None
     local_device: str
     local_load_in_4bit: bool
     local_batch_size: int
@@ -92,7 +59,6 @@ def get_llm_config(load_env: bool = True) -> LLMConfig:
         local_model=os.getenv(
             "LOCAL_MODEL", os.getenv("VLM_LOCAL_MODEL", "Qwen/Qwen3-VL-2B-Instruct")
         ).strip(),
-        model_cache_dir=resolve_model_cache_dir(),
         local_device=os.getenv(
             "LOCAL_DEVICE", os.getenv("VLM_LOCAL_DEVICE", os.getenv("AIC_DEVICE", "cpu"))
         ).strip().lower(),
