@@ -43,10 +43,10 @@ metadata trước khi đưa kết quả vào Weighted RRF.
 
 ## Cấu hình và tài liệu kèm theo
 
-Sao chép `.env.example` thành `.env`. Toàn bộ Rewrite, Planner, reranking và QA
-chạy bằng model local trên CUDA; không cần API key. `requirements.txt` là file
-dependency duy nhất và bao gồm CUDA PyTorch, CLIP, Transformers, Accelerate và
-bitsandbytes.
+Sao chép `.env.example` thành `.env`. Profile mặc định chạy CLIP và Qwen local
+trên CPU, không cần API key. Máy NVIDIA có thể đổi `LOCAL_DEVICE` và
+`AIC_DEVICE` thành `cuda`, đồng thời bật `LOCAL_LOAD_IN_4BIT=true`.
+`requirements.txt` là file dependency duy nhất cho cả hai profile.
 
 ## Cài đặt
 

@@ -37,21 +37,20 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-`requirements.txt` đã bao gồm CUDA PyTorch, Transformers, Accelerate,
-bitsandbytes và các dependency của CLIP/VLM.
+`requirements.txt` dùng PyTorch có khả năng CUDA nhưng vẫn chạy được profile
+CPU. Bitsandbytes chỉ được dùng khi profile GPU bật chế độ 4-bit.
 
 Luôn chạy lệnh cài đặt bằng đúng Python/virtual environment dùng để chạy
-`run_inference.py`. Chương trình sẽ từ chối khởi động nếu `.env` yêu cầu CUDA
-nhưng PyTorch hiện tại là bản CPU.
+`run_inference.py`.
 
-Kiểm tra CUDA:
+Kiểm tra môi trường:
 
 ```powershell
 python -c "import torch; print(torch.__version__); print('CUDA:', torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No CUDA GPU')"
 ```
 
-Kết quả cần có `CUDA: True`. Nếu máy không có GPU NVIDIA hoặc PyTorch vẫn là
-bản CPU, đặt `AIC_DEVICE=cpu` trong `.env` thay vì `cuda`.
+Profile CPU chấp nhận `CUDA: False`. Profile GPU cần `CUDA: True` và phải hiện
+đúng tên card NVIDIA.
 
 ## 3. Cấu hình `.env`
 
@@ -61,26 +60,37 @@ Tạo `.env` từ `.env.example`. Toàn bộ Rewrite, Planner, reranking và QA 
 LLM_PROVIDER=local
 VLM_PROVIDER=local
 LOCAL_MODEL=Qwen/Qwen3-VL-2B-Instruct
-LOCAL_DEVICE=cuda
-LOCAL_LOAD_IN_4BIT=true
-VLM_LOCAL_BATCH_SIZE=8
+LOCAL_DEVICE=cpu
+LOCAL_LOAD_IN_4BIT=false
+VLM_LOCAL_BATCH_SIZE=1
 VLM_LOCAL_MAX_NEW_TOKENS=192
 LLM_LOCAL_MAX_NEW_TOKENS=1536
 VLM_LOCAL_MIN_PIXELS=200704
 VLM_LOCAL_MAX_PIXELS=401408
 LLM_REWRITE_TEMPERATURE=0
 LLM_PLANNER_TEMPERATURE=0
-VLM_CANDIDATE_LIMIT=40
+VLM_CANDIDATE_LIMIT=10
 VLM_WEIGHT=0.65
 
 AIC_ARTIFACT_DIR=video_search_bundle/clip-b32-btc-v1
 AIC_CLIP_MODEL_NAME=ViT-B/32
 AIC_USE_LORA=true
-AIC_DEVICE=cuda
+AIC_DEVICE=cpu
 AIC_KEYFRAMES_ROOT=Keyframes
 ```
 
 Không cần API key. Không commit `.env` vào source code.
+
+Profile CPU dùng FP32, cần khoảng 10-12 GB RAM và sẽ chậm, phù hợp để kiểm tra
+luồng. Trên máy NVIDIA 8 GB VRAM, đổi các dòng sau để chạy GPU:
+
+```env
+LOCAL_DEVICE=cuda
+LOCAL_LOAD_IN_4BIT=true
+VLM_LOCAL_BATCH_SIZE=8
+VLM_CANDIDATE_LIMIT=40
+AIC_DEVICE=cuda
+```
 
 ## 4. Chuẩn bị query
 
@@ -158,8 +168,8 @@ outputs/checkpoint.jsonl
 ## 6. Bật VLM local
 
 VLM dùng ảnh keyframe để rerank KIS hoặc trả lời QA. Với cấu hình mặc định,
-Qwen3-VL chạy local bằng CUDA và không gọi API. Dependency cho chế độ 4-bit
-đã nằm trong `requirements.txt`:
+Qwen3-VL chạy local bằng CPU và không gọi API. Chế độ này chậm; nên dùng để
+smoke test ít query/candidate trước khi chuyển sang profile GPU:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -192,7 +202,7 @@ Không dùng lại `checkpoint.jsonl` của bước 5. Checkpoint đánh dấu q
 nếu dùng lại file đó, bước 6 sẽ bỏ qua query và không gọi VLM. Kết quả VLM nằm trong
 `outputs/results-vlm/`.
 
-`VLM_LOCAL_BATCH_SIZE` giới hạn số ảnh local xử lý trong một lượt để tránh tràn VRAM.
+`VLM_LOCAL_BATCH_SIZE` giới hạn số ảnh local xử lý trong một lượt để tránh tràn RAM/VRAM.
 `VLM_CANDIDATE_LIMIT` kiểm soát số keyframe được rerank; `VLM_WEIGHT` là trọng số
 confidence của VLM khi trộn với CLIP/RRF.
 
@@ -223,6 +233,7 @@ TRAKE_001,Người bước vào rồi ngồi xuống,TRAKE
 - `Missing CLIP manifest`: sai `AIC_ARTIFACT_DIR`.
 - `LoRA manifest requires ...`: kiểm tra `AIC_USE_LORA=true` và `lora_weights.pt`.
 - VLM không tìm thấy ảnh: kiểm tra `AIC_KEYFRAMES_ROOT` và đường dẫn keyframe.
-- Lỗi thiết bị: kiểm tra `.env` có `AIC_DEVICE=cuda`, driver NVIDIA và PyTorch CUDA; chạy lại lệnh kiểm tra CUDA ở mục 2.
+- Lỗi thiết bị CPU: đặt `LOCAL_DEVICE=cpu`, `LOCAL_LOAD_IN_4BIT=false` và `AIC_DEVICE=cpu`.
+- Lỗi thiết bị GPU: đặt hai device thành `cuda`, kiểm tra driver NVIDIA và `torch.cuda.is_available()` ở mục 2.
 - `Local VLM response ... JSON object`: cập nhật branch `KIS_QA` mới nhất và đặt `LLM_LOCAL_MAX_NEW_TOKENS=1536`. Parser cứu các field hoàn chỉnh nếu output bị cắt; Rewrite có fallback và Planner tự thử lại một lần.
 - Không có output: kiểm tra tên file có hậu tố `-kis`, `-qa` hoặc `-trake`.

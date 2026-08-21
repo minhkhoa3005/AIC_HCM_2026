@@ -158,23 +158,25 @@ class LocalVLM:
                 "support, accelerate, and torch. Install requirements.txt."
             ) from exc
 
-        if self.config.local_device.startswith("cuda") and not torch.cuda.is_available():
+        use_cuda = self.config.local_device.startswith("cuda")
+        if use_cuda and not torch.cuda.is_available():
             raise RuntimeError(
                 "LOCAL_DEVICE=cuda but CUDA is unavailable. "
                 "Install a CUDA PyTorch build or set LOCAL_DEVICE=cpu."
             )
-        if self.config.local_load_in_4bit and not torch.cuda.is_available():
-            raise RuntimeError("LOCAL_LOAD_IN_4BIT=true requires an NVIDIA CUDA device")
+        if self.config.local_load_in_4bit and not use_cuda:
+            raise RuntimeError(
+                "LOCAL_LOAD_IN_4BIT=true requires LOCAL_DEVICE=cuda"
+            )
 
-        model_kwargs: dict[str, Any] = {"device_map": "auto", "dtype": "auto"}
+        model_kwargs = _base_model_load_kwargs(self.config.local_device, torch)
         if self.config.local_load_in_4bit:
             try:
                 from transformers import BitsAndBytesConfig
             except ImportError as exc:  # pragma: no cover - optional dependency guard
                 raise ImportError(
                     "4-bit local VLM loading requires bitsandbytes. "
-                    "Install requirements.txt or set "
-                    "VLM_LOCAL_LOAD_IN_4BIT=false."
+                    "Install requirements.txt or set LOCAL_LOAD_IN_4BIT=false."
                 ) from exc
             model_kwargs["quantization_config"] = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -201,6 +203,16 @@ class LocalVLM:
             max_pixels=self.config.local_max_pixels,
         )
         self._torch = torch
+
+
+def _base_model_load_kwargs(local_device: str, torch_module: Any) -> dict[str, Any]:
+    """Build a device map that cannot silently ignore the selected profile."""
+
+    if local_device.startswith("cuda"):
+        return {"device_map": {"": local_device}, "dtype": "auto"}
+    if local_device != "cpu":
+        raise ValueError(f"Unsupported LOCAL_DEVICE: {local_device!r}")
+    return {"device_map": {"": "cpu"}, "dtype": torch_module.float32}
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:

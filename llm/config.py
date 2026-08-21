@@ -60,10 +60,10 @@ def get_llm_config(load_env: bool = True) -> LLMConfig:
             "LOCAL_MODEL", os.getenv("VLM_LOCAL_MODEL", "Qwen/Qwen3-VL-2B-Instruct")
         ).strip(),
         local_device=os.getenv(
-            "LOCAL_DEVICE", os.getenv("VLM_LOCAL_DEVICE", os.getenv("AIC_DEVICE", "cuda"))
+            "LOCAL_DEVICE", os.getenv("VLM_LOCAL_DEVICE", os.getenv("AIC_DEVICE", "cpu"))
         ).strip().lower(),
         local_load_in_4bit=_read_bool(
-            "LOCAL_LOAD_IN_4BIT", _read_bool("VLM_LOCAL_LOAD_IN_4BIT", True)
+            "LOCAL_LOAD_IN_4BIT", _read_bool("VLM_LOCAL_LOAD_IN_4BIT", False)
         ),
         local_batch_size=max(1, int(os.getenv("VLM_LOCAL_BATCH_SIZE", "8"))),
         local_max_new_tokens=max(16, int(os.getenv("VLM_LOCAL_MAX_NEW_TOKENS", "192"))),

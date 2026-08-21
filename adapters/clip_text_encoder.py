@@ -93,7 +93,7 @@ class ClipTextEncoder:
     @classmethod
     def from_env(cls) -> "ClipTextEncoder":
         bundle = os.getenv("AIC_ARTIFACT_DIR", "video_search_bundle/clip-b32-btc-v1")
-        return cls(bundle, os.getenv("AIC_DEVICE"))
+        return cls(bundle, os.getenv("AIC_DEVICE", "cpu"))
 
     @staticmethod
     def _resolve_device(configured: str | None) -> str:

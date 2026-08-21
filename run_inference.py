@@ -24,8 +24,10 @@ from llm.task_types import infer_task_type_from_name
 def _validate_requested_devices(*, with_vlm: bool, vlm_provider: str) -> None:
     """Fail early when a CUDA configuration is paired with CPU-only PyTorch."""
 
-    clip_device = os.getenv("AIC_DEVICE", "cuda").strip().lower()
-    vlm_device = os.getenv("VLM_LOCAL_DEVICE", clip_device).strip().lower()
+    clip_device = os.getenv("AIC_DEVICE", "cpu").strip().lower()
+    vlm_device = os.getenv(
+        "LOCAL_DEVICE", os.getenv("VLM_LOCAL_DEVICE", clip_device)
+    ).strip().lower()
     cuda_requested = clip_device.startswith("cuda") or (
         with_vlm and vlm_provider == "local" and vlm_device.startswith("cuda")
     )
@@ -37,9 +39,9 @@ def _validate_requested_devices(*, with_vlm: bool, vlm_provider: str) -> None:
         )
     if torch.cuda.is_available():
         print(f"CUDA available: {torch.cuda.get_device_name(0)}")
-        print(f"CLIP device: {clip_device}")
-        if with_vlm and vlm_provider == "local":
-            print(f"Local VLM device: {vlm_device}")
+    print(f"CLIP device: {clip_device}")
+    if with_vlm and vlm_provider == "local":
+        print(f"Local VLM device: {vlm_device}")
 
 
 def _read_queries(path: Path) -> list[tuple[str, str] | tuple[str, str, str]]:
