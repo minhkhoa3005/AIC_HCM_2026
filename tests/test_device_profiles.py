@@ -1,5 +1,6 @@
 """Tests for explicit CPU and CUDA runtime profiles."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -39,3 +40,17 @@ def test_cuda_profile_keeps_requested_device() -> None:
 def test_unknown_device_is_rejected() -> None:
     with pytest.raises(ValueError, match="Unsupported LOCAL_DEVICE"):
         _base_model_load_kwargs("directml", SimpleNamespace(float32=object()))
+
+
+def test_relative_model_cache_is_resolved_from_project_root(monkeypatch) -> None:
+    monkeypatch.setenv("AIC_MODEL_CACHE_DIR", "runtime_models")
+    config = get_llm_config(load_env=False)
+
+    expected_root = Path(__file__).resolve().parents[1] / "runtime_models"
+    assert config.model_cache_dir == expected_root.resolve()
+
+
+def test_model_cache_can_be_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("AIC_MODEL_CACHE_DIR", "")
+    config = get_llm_config(load_env=False)
+    assert config.model_cache_dir is None

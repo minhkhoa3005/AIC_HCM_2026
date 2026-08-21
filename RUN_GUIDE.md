@@ -60,6 +60,7 @@ Tạo `.env` từ `.env.example`. Toàn bộ Rewrite, Planner, reranking và QA 
 LLM_PROVIDER=local
 VLM_PROVIDER=local
 LOCAL_MODEL=Qwen/Qwen3-VL-2B-Instruct
+AIC_MODEL_CACHE_DIR=model_cache
 LOCAL_DEVICE=cpu
 LOCAL_LOAD_IN_4BIT=false
 VLM_LOCAL_BATCH_SIZE=1
@@ -80,6 +81,26 @@ AIC_KEYFRAMES_ROOT=Keyframes
 ```
 
 Không cần API key. Không commit `.env` vào source code.
+
+`AIC_MODEL_CACHE_DIR` điều khiển nơi lưu model Qwen và CLIP. Đường dẫn tương đối
+được tính từ thư mục dự án; cấu hình trên lưu vào:
+
+```text
+LLM/model_cache/
+├── huggingface/hub/   # Qwen3-VL
+└── clip/              # OpenAI CLIP
+```
+
+Có thể đặt đường dẫn tuyệt đối sang ổ còn trống, ví dụ:
+
+```env
+AIC_MODEL_CACHE_DIR=E:/AIC-model-cache
+```
+
+Nếu model đang tải vào ổ C, nhấn `Ctrl+C`, đổi biến trên rồi chạy lại. Sau khi
+model chạy thành công từ vị trí mới, cache cũ tại
+`%USERPROFILE%\.cache\huggingface\hub` có thể được di chuyển hoặc xóa thủ công
+để giải phóng ổ C.
 
 Profile CPU dùng FP32, cần khoảng 10-12 GB RAM và sẽ chậm, phù hợp để kiểm tra
 luồng. Trên máy NVIDIA 8 GB VRAM, đổi các dòng sau để chạy GPU:
@@ -231,6 +252,7 @@ TRAKE_001,Người bước vào rồi ngồi xuống,TRAKE
 ## 8. Kiểm tra nhanh khi lỗi
 
 - `Missing CLIP manifest`: sai `AIC_ARTIFACT_DIR`.
+- Ổ C hết dung lượng khi tải model: đặt `AIC_MODEL_CACHE_DIR` sang ổ D/E rồi chạy lại.
 - `LoRA manifest requires ...`: kiểm tra `AIC_USE_LORA=true` và `lora_weights.pt`.
 - VLM không tìm thấy ảnh: kiểm tra `AIC_KEYFRAMES_ROOT` và đường dẫn keyframe.
 - Lỗi thiết bị CPU: đặt `LOCAL_DEVICE=cpu`, `LOCAL_LOAD_IN_4BIT=false` và `AIC_DEVICE=cpu`.

@@ -22,6 +22,7 @@ def get_local_vlm(config: LLMConfig | None = None) -> "LocalVLM":
     resolved = config or get_llm_config()
     key = (
         resolved.local_model,
+        str(resolved.model_cache_dir),
         resolved.local_device,
         resolved.local_load_in_4bit,
         resolved.local_min_pixels,
@@ -170,6 +171,11 @@ class LocalVLM:
             )
 
         model_kwargs = _base_model_load_kwargs(self.config.local_device, torch)
+        hf_cache_dir: Path | None = None
+        if self.config.model_cache_dir is not None:
+            hf_cache_dir = self.config.model_cache_dir / "huggingface" / "hub"
+            hf_cache_dir.mkdir(parents=True, exist_ok=True)
+            model_kwargs["cache_dir"] = str(hf_cache_dir)
         if self.config.local_load_in_4bit:
             try:
                 from transformers import BitsAndBytesConfig
@@ -197,10 +203,15 @@ class LocalVLM:
                 self.config.local_model,
                 **model_kwargs,
             )
+        processor_kwargs: dict[str, Any] = {
+            "min_pixels": self.config.local_min_pixels,
+            "max_pixels": self.config.local_max_pixels,
+        }
+        if hf_cache_dir is not None:
+            processor_kwargs["cache_dir"] = str(hf_cache_dir)
         self._processor = AutoProcessor.from_pretrained(
             self.config.local_model,
-            min_pixels=self.config.local_min_pixels,
-            max_pixels=self.config.local_max_pixels,
+            **processor_kwargs,
         )
         self._torch = torch
 

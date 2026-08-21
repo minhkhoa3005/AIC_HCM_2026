@@ -12,6 +12,9 @@ except ImportError:  # pragma: no cover - optional dependency guard
     load_dotenv = None
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
 def load_project_env(env_path: str | Path = ".env") -> None:
     """Load a local .env file when python-dotenv is installed."""
 
@@ -27,6 +30,18 @@ def _read_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def resolve_model_cache_dir() -> Path | None:
+    """Resolve the shared model cache relative to the project root."""
+
+    raw = os.getenv("AIC_MODEL_CACHE_DIR", "model_cache").strip()
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path.resolve()
+
+
 @dataclass(frozen=True)
 class LLMConfig:
     """Runtime knobs for the shared local text and vision-language model."""
@@ -34,6 +49,7 @@ class LLMConfig:
     llm_provider: str
     vlm_provider: str
     local_model: str
+    model_cache_dir: Path | None
     local_device: str
     local_load_in_4bit: bool
     local_batch_size: int
@@ -59,6 +75,7 @@ def get_llm_config(load_env: bool = True) -> LLMConfig:
         local_model=os.getenv(
             "LOCAL_MODEL", os.getenv("VLM_LOCAL_MODEL", "Qwen/Qwen3-VL-2B-Instruct")
         ).strip(),
+        model_cache_dir=resolve_model_cache_dir(),
         local_device=os.getenv(
             "LOCAL_DEVICE", os.getenv("VLM_LOCAL_DEVICE", os.getenv("AIC_DEVICE", "cpu"))
         ).strip().lower(),

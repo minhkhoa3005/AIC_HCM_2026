@@ -47,6 +47,8 @@ Sao chép `.env.example` thành `.env`. Profile mặc định chạy CLIP và Qw
 trên CPU, không cần API key. Máy NVIDIA có thể đổi `LOCAL_DEVICE` và
 `AIC_DEVICE` thành `cuda`, đồng thời bật `LOCAL_LOAD_IN_4BIT=true`.
 `requirements.txt` là file dependency duy nhất cho cả hai profile.
+Model được lưu trong `AIC_MODEL_CACHE_DIR` (mặc định `model_cache/` trong dự án)
+thay vì cache người dùng trên ổ C.
 
 ## Cài đặt
 
