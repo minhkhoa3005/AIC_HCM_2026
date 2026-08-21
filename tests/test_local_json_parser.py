@@ -37,8 +37,13 @@ def test_recovers_fenced_json_with_explanation() -> None:
     assert payload == {"answer": "white"}
 
 
-def test_does_not_treat_nested_array_as_top_level_payload() -> None:
+def test_recovers_complete_fields_from_truncated_object() -> None:
+    payload = _parse_json_object(
+        '{"rewritten_query": "query", "preserved_terms": ["unfinished'
+    )
+    assert payload == {"rewritten_query": "query"}
+
+
+def test_rejects_truncated_object_without_complete_fields() -> None:
     with pytest.raises(ValueError, match="invalid JSON"):
-        _parse_json_object(
-            '{"rewritten_query": "query", "preserved_terms": []'
-        )
+        _parse_json_object('{"rewritten_query": "unfinished')

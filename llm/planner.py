@@ -25,6 +25,7 @@ không bịa màu sắc, người, vật, hành động hoặc bối cảnh.
 Với TEXTUAL_KIS hoặc QA:
 - anchor là bản dịch hình ảnh tiếng Anh ASCII sát nghĩa.
 - expansions có đúng 10 mô tả hình ảnh tiếng Anh ASCII, khác nhau nhưng cùng nghĩa.
+- anchor và mỗi expansion tối đa 24 từ; không kể chuyện hoặc giải thích dài.
 - QA giữ nguyên câu hỏi tiếng Việt trong question; TEXTUAL_KIS đặt question=null.
 - events và event_queries là [].
 
@@ -35,8 +36,6 @@ Với TRAKE:
 
 Chỉ trả về đúng một JSON object hoàn chỉnh, không markdown, không field khác:
 {
-  "task_type":"TEXTUAL_KIS | QA | TRAKE",
-  "search_description":"mô tả ngắn tiếng Việt",
   "question":null,
   "anchor":"English visual description",
   "expansions":["10 English visual descriptions for KIS or QA"],
@@ -82,19 +81,24 @@ def plan_query(
         if attempt:
             attempt_prompt += (
                 "\n\nRETRY: The previous response was invalid or incomplete. "
-                "Return one complete JSON object with every required field."
+                "Return one complete, compact JSON object. Keep every string short."
             )
         try:
+            planner_tokens = max(
+                resolved_config.local_text_max_new_tokens,
+                1536 if attempt else 1024,
+            )
             raw_plan = generate_llm_json(
                 attempt_prompt,
                 config=resolved_config,
                 temperature=resolved_config.llm_planner_temperature,
                 client=planner_client,
-                max_new_tokens=resolved_config.local_text_max_new_tokens,
+                max_new_tokens=planner_tokens,
             )
             raw_plan["raw_query"] = rewritten.raw_query
             raw_plan["rewritten_query"] = rewritten.rewritten_query
             raw_plan["task_type"] = resolved_task_type.value
+            raw_plan["search_description"] = rewritten.rewritten_query
             return validate_query_plan(raw_plan)
         except (TypeError, ValueError) as exc:
             last_error = exc

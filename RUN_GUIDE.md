@@ -65,7 +65,7 @@ LOCAL_DEVICE=cuda
 LOCAL_LOAD_IN_4BIT=true
 VLM_LOCAL_BATCH_SIZE=8
 VLM_LOCAL_MAX_NEW_TOKENS=192
-LLM_LOCAL_MAX_NEW_TOKENS=768
+LLM_LOCAL_MAX_NEW_TOKENS=1536
 VLM_LOCAL_MIN_PIXELS=200704
 VLM_LOCAL_MAX_PIXELS=401408
 LLM_REWRITE_TEMPERATURE=0
@@ -224,5 +224,5 @@ TRAKE_001,Người bước vào rồi ngồi xuống,TRAKE
 - `LoRA manifest requires ...`: kiểm tra `AIC_USE_LORA=true` và `lora_weights.pt`.
 - VLM không tìm thấy ảnh: kiểm tra `AIC_KEYFRAMES_ROOT` và đường dẫn keyframe.
 - Lỗi thiết bị: kiểm tra `.env` có `AIC_DEVICE=cuda`, driver NVIDIA và PyTorch CUDA; chạy lại lệnh kiểm tra CUDA ở mục 2.
-- `Local VLM response ... JSON object`: cập nhật branch `KIS_QA` mới nhất. Rewrite sẽ giữ nguyên raw query nếu JSON local bị hỏng; Planner dùng contract rút gọn và tự thử lại một lần.
+- `Local VLM response ... JSON object`: cập nhật branch `KIS_QA` mới nhất và đặt `LLM_LOCAL_MAX_NEW_TOKENS=1536`. Parser cứu các field hoàn chỉnh nếu output bị cắt; Rewrite có fallback và Planner tự thử lại một lần.
 - Không có output: kiểm tra tên file có hậu tố `-kis`, `-qa` hoặc `-trake`.

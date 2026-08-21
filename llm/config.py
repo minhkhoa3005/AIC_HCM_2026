@@ -68,7 +68,7 @@ def get_llm_config(load_env: bool = True) -> LLMConfig:
         local_batch_size=max(1, int(os.getenv("VLM_LOCAL_BATCH_SIZE", "8"))),
         local_max_new_tokens=max(16, int(os.getenv("VLM_LOCAL_MAX_NEW_TOKENS", "192"))),
         local_text_max_new_tokens=max(
-            64, int(os.getenv("LLM_LOCAL_MAX_NEW_TOKENS", "768"))
+            64, int(os.getenv("LLM_LOCAL_MAX_NEW_TOKENS", "1536"))
         ),
         local_min_pixels=max(
             28 * 28, int(os.getenv("VLM_LOCAL_MIN_PIXELS", str(256 * 28 * 28)))

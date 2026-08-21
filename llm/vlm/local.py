@@ -213,6 +213,10 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     try:
         value = json.loads(cleaned)
     except json.JSONDecodeError:
+        if cleaned.startswith("{"):
+            partial = _recover_partial_object(cleaned)
+            if partial:
+                return partial
         decoder = json.JSONDecoder()
         matches = list(re.finditer(r"[\[{]", cleaned))
         # If the response starts as an object/array, decoding a nested array
@@ -230,6 +234,41 @@ def _parse_json_object(text: str) -> dict[str, Any]:
             preview = " ".join(cleaned.split())[:240]
             raise ValueError(f"Local VLM returned invalid JSON: {preview!r}")
     return _coerce_json_object(value, cleaned)
+
+
+def _recover_partial_object(text: str) -> dict[str, Any]:
+    """Keep complete top-level fields when generation ends mid-object."""
+
+    decoder = json.JSONDecoder()
+    recovered: dict[str, Any] = {}
+    index = 1
+    length = len(text)
+    while index < length:
+        while index < length and (text[index].isspace() or text[index] == ","):
+            index += 1
+        if index >= length or text[index] == "}":
+            break
+        try:
+            key, key_end = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            break
+        if not isinstance(key, str):
+            break
+        index = key_end
+        while index < length and text[index].isspace():
+            index += 1
+        if index >= length or text[index] != ":":
+            break
+        index += 1
+        while index < length and text[index].isspace():
+            index += 1
+        try:
+            field_value, value_end = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            break
+        recovered[key] = field_value
+        index = value_end
+    return recovered
 
 
 def _coerce_json_object(value: Any, source_text: str) -> dict[str, Any]:

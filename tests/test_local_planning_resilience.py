@@ -1,5 +1,7 @@
 """Regression tests for malformed local Rewrite and Planner output."""
 
+from dataclasses import replace
+
 from llm.config import get_llm_config
 from llm.rewrite import RewrittenQuery
 from llm.task_types import TaskType
@@ -35,10 +37,12 @@ def test_planner_retries_once_after_invalid_json(monkeypatch) -> None:
         ),
     )
     calls = 0
+    token_limits = []
 
     def generate_plan(*args, **kwargs):
         nonlocal calls
         calls += 1
+        token_limits.append(kwargs["max_new_tokens"])
         if calls == 1:
             raise ValueError("incomplete JSON")
         return {
@@ -59,12 +63,17 @@ def test_planner_retries_once_after_invalid_json(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(planner, "generate_llm_json", generate_plan)
+    config = replace(
+        get_llm_config(load_env=False),
+        local_text_max_new_tokens=768,
+    )
     result = planner.plan_query(
         "Tìm bốn phi hành gia mặc áo đen.",
         TaskType.TEXTUAL_KIS,
-        config=get_llm_config(load_env=False),
+        config=config,
     )
 
     assert calls == 2
+    assert token_limits == [1024, 1536]
     assert result.anchor == "four astronauts wearing black suits"
     assert len(result.expansions) == 10
