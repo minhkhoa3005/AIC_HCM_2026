@@ -134,10 +134,7 @@ class LocalVLM:
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
         )[0]
-        payload = _parse_json_object(response)
-        if not isinstance(payload, dict):
-            raise ValueError("Local VLM response must be a JSON object")
-        return payload
+        return _parse_json_object(response)
 
     def _load(self) -> None:
         if self._model is not None:
@@ -201,22 +198,49 @@ class LocalVLM:
         self._torch = torch
 
 
-def _parse_json_object(text: str) -> Any:
-    """Recover a JSON object when a local model emits a short wrapper."""
+def _parse_json_object(text: str) -> dict[str, Any]:
+    """Recover and normalize a JSON object emitted by a local model."""
 
     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
         cleaned = re.sub(r"\s*```$", "", cleaned)
     try:
-        return json.loads(cleaned)
+        value = json.loads(cleaned)
     except json.JSONDecodeError:
         decoder = json.JSONDecoder()
         for match in re.finditer(r"[\[{]", cleaned):
             try:
                 value, _ = decoder.raw_decode(cleaned[match.start() :])
-                return value
+                break
             except json.JSONDecodeError:
                 continue
-    preview = " ".join(cleaned.split())[:240]
-    raise ValueError(f"Local VLM returned invalid JSON: {preview!r}")
+        else:
+            preview = " ".join(cleaned.split())[:240]
+            raise ValueError(f"Local VLM returned invalid JSON: {preview!r}")
+    return _coerce_json_object(value, cleaned)
+
+
+def _coerce_json_object(value: Any, source_text: str) -> dict[str, Any]:
+    """Repair common shape deviations without inventing semantic fields."""
+
+    if isinstance(value, dict):
+        if len(value) == 1:
+            wrapped = next(iter(value.values()))
+            if isinstance(wrapped, dict):
+                return wrapped
+        return value
+
+    if isinstance(value, list):
+        object_items = [item for item in value if isinstance(item, dict)]
+        if object_items:
+            rank_keys = {"index", "video_id", "frame_id", "relevant", "confidence"}
+            if all(rank_keys.intersection(item) for item in object_items):
+                return {"items": object_items}
+            return object_items[0]
+
+    preview = " ".join(source_text.split())[:240]
+    raise ValueError(
+        "Local VLM response could not be normalized to a JSON object; "
+        f"received {type(value).__name__}: {preview!r}"
+    )
