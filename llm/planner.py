@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from .config import LLMConfig, get_llm_config
@@ -13,77 +14,38 @@ from .task_types import TaskType, normalize_task_type
 from .validator import validate_query_plan
 
 
+logger = logging.getLogger(__name__)
+
+
 _PLANNER_SYSTEM_PROMPT = r"""
-Bạn là bộ lập QueryPlan cho hệ thống tìm kiếm video AIC. Nhận RAW_QUERY và
-REWRITTEN_QUERY, rồi chỉ trả về một JSON QueryPlan hợp lệ.
+Lập kế hoạch tìm kiếm video từ truy vấn. TASK_TYPE được cung cấp từ tên file;
+không được thay đổi. Chỉ dùng chi tiết có trong truy vấn, không đoán đáp án QA,
+không bịa màu sắc, người, vật, hành động hoặc bối cảnh.
 
-NGÔN NGỮ VÀ BẢO TOÀN THÔNG TIN
-- Mọi field semantic (trừ clip_queries và source) viết bằng tiếng Việt có dấu.
-  clip_queries là mô tả hình ảnh tiếng Anh ASCII cho CLIP.
-- Chỉ dùng thông tin có trong hai query. RAW_QUERY quyết định tên riêng, mã,
-  chữ, quan hệ và thứ tự; REWRITTEN_QUERY chỉ sửa dấu/chính tả/viết tắt.
-- Không bịa người, vật, thuộc tính, bối cảnh, nguồn camera hay đáp án. Điều
-  không rõ dùng null, [] hoặc {}. negative_constraints chỉ chứa điều được nói rõ.
-- Giữ quan hệ chủ thể - hành động - đối tượng trong entities.actions.
-- source chỉ có thể là surveillance, sousveillance, dashcam, handheld,
-  broadcast, mobile_phone hoặc unknown; không suy đoán source.
+Với TEXTUAL_KIS hoặc QA:
+- anchor là bản dịch hình ảnh tiếng Anh ASCII sát nghĩa.
+- expansions có đúng 10 mô tả hình ảnh tiếng Anh ASCII, khác nhau nhưng cùng nghĩa.
+- QA giữ nguyên câu hỏi tiếng Việt trong question; TEXTUAL_KIS đặt question=null.
+- events và event_queries là [].
 
-TASK_TYPE
-- TASK_TYPE được cung cấp sẵn từ tên file của ban tổ chức. Không tự suy luận,
-  không đổi task_type.
-- TEXTUAL_KIS: tìm một cảnh/keyframe; question=null.
-- QA: cần trả lời câu hỏi; question là nguyên câu hỏi tiếng Việt.
+Với TRAKE:
+- events chứa các sự kiện tiếng Việt theo đúng thứ tự thời gian, ít nhất 2 mục.
+- event_queries có cùng số mục; mỗi mục là mô tả tiếng Anh ASCII của một event.
+- question=null, anchor="" và expansions=[].
 
-VISUAL_HINTS
-- medium luôn là "video frame".
-- capture_context=null nếu nguồn quay không được nêu. CCTV/camera giám sát cố
-  định -> surveillance; camera đeo người -> sousveillance; camera hành trình
-  -> dashcam; camera cầm tay -> handheld. Chỉ điền style/viewpoint/motion khi
-  có bằng chứng.
-- core_subjects lấy từ entities/objects; hypernyms, states, environment chỉ
-  giữ thông tin an toàn và được nêu rõ.
-
-CLIP_QUERIES
-- Đây là danh sách cuối cùng, không phải pool candidate. Mỗi câu là mô tả
-  trực quan độc lập có thể xuất hiện trong một frame; không phải câu hỏi/lệnh.
-- TEXTUAL_KIS: 1 query chính, thêm tối đa 1 query khi có bằng chứng độc lập.
-  QA: 1 query chính, thêm tối đa 3 query bằng chứng độc lập.
-- Query mới phải thêm một bằng chứng rõ ràng (chủ thể/vật thể, hành động-quan
-  hệ, bối cảnh, hoặc vùng logo/overlay/biển hiệu), không chỉ đổi từ đồng nghĩa.
-- Không tạo query nhằm "nhìn kỹ" hay suy luận đáp án: cấm "showing clothing
-  details", "of a specific color", "showing if", "to identify", "for OCR".
-  Màu áo chưa biết, có áo khoác không, cách cầm đồ vật, hoặc nội dung chữ là
-  việc VLM/OCR đọc SAU retrieval, không phải thuộc tính để bịa trong query.
-- Chỉ gắn camera context khi được nêu rõ. Khi không biết source, dùng mô tả
-  trung tính; không ép câu nào phải mở đầu bằng "a video frame showing".
-- Với OCR/ASR chỉ mô tả vùng chữ/logo/đồng hồ/người nói đã được nêu; không
-  đoán nội dung và không viết mục đích như "for OCR".
-
-MINI FEW-SHOT (chỉ minh họa field khác biệt; JSON thật phải đủ schema)
-KIS:
-Input: Tìm cảnh xe buýt màu vàng dừng bên đường.
-Output liên quan:
-{"task_type":"TEXTUAL_KIS","question":null,"visual_hints":{"medium":"video frame","capture_context":null},"clip_queries":["a yellow bus stopped by the road"]}
-
-QA:
-Input: Tìm bốn phụ nữ cầm giấy trong chương trình truyền hình. Người thứ hai mặc áo màu gì?
-Output liên quan:
-{"task_type":"QA","question":"Người thứ hai mặc áo màu gì?","clip_queries":["four women standing side by side and holding sheets of paper in a television broadcast"]}
-Không tạo query có màu áo giả định hoặc "showing clothing details".
-
-CHỈ TRẢ VỀ đúng một JSON object, không array, không nhiều phương án, không
-markdown/giải thích/field thừa:
+Chỉ trả về đúng một JSON object hoàn chỉnh, không markdown, không field khác:
 {
-  "task_type":"TEXTUAL_KIS | QA",
-  "search_description":"mô tả tiếng Việt có dấu",
-  "question":"câu hỏi tiếng Việt hoặc null",
-  "entities":[{"name":"đối tượng","type":"person | object | vehicle | location | unknown","attributes":["thuộc tính"],"actions":[{"verb":"hành động","target":"đích hoặc null"}]}],
-  "objects":["danh từ"], "actions":["hành động"], "scene":["bối cảnh"],
-  "positive_constraints":["ràng buộc phải có"],
-  "negative_constraints":["ràng buộc phải tránh"],
-  "metadata_keywords":["từ khóa OCR/ASR"],
-  "visual_hints":{"medium":"video frame","capture_context":{"source":"surveillance | sousveillance | dashcam | handheld | broadcast | mobile_phone | unknown","camera_style":"mô tả hoặc null","viewpoint":"mô tả hoặc null","camera_motion":"mô tả hoặc null","certainty":"explicit | metadata | unknown"},"core_subjects":["chủ thể"],"hypernyms":{"đối tượng":["siêu cấp an toàn"]},"states":["trạng thái"],"environment":["môi trường"]},
-  "clip_queries":["concise English visual query"]
+  "task_type":"TEXTUAL_KIS | QA | TRAKE",
+  "search_description":"mô tả ngắn tiếng Việt",
+  "question":null,
+  "anchor":"English visual description",
+  "expansions":["10 English visual descriptions for KIS or QA"],
+  "objects":[],
+  "actions":[],
+  "negative_constraints":[],
+  "metadata_keywords":[],
+  "events":[],
+  "event_queries":[]
 }
 """
 
@@ -114,30 +76,28 @@ def plan_query(
         f"{json.dumps(rewritten.uncertain_terms, ensure_ascii=False)}"
     )
     prompt += f"\n\nTASK_TYPE_FROM_FILENAME:\n{resolved_task_type.value}"
-    prompt += """
+    last_error: Exception | None = None
+    for attempt in range(2):
+        attempt_prompt = prompt
+        if attempt:
+            attempt_prompt += (
+                "\n\nRETRY: The previous response was invalid or incomplete. "
+                "Return one complete JSON object with every required field."
+            )
+        try:
+            raw_plan = generate_llm_json(
+                attempt_prompt,
+                config=resolved_config,
+                temperature=resolved_config.llm_planner_temperature,
+                client=planner_client,
+                max_new_tokens=resolved_config.local_text_max_new_tokens,
+            )
+            raw_plan["raw_query"] = rewritten.raw_query
+            raw_plan["rewritten_query"] = rewritten.rewritten_query
+            raw_plan["task_type"] = resolved_task_type.value
+            return validate_query_plan(raw_plan)
+        except (TypeError, ValueError) as exc:
+            last_error = exc
+            logger.warning("Local planner attempt %d failed: %s", attempt + 1, exc)
 
-OUTPUT CONTRACT OVERRIDE:
-- Return an English ASCII `anchor` that is the closest literal visual translation.
-- Return exactly 10 distinct English ASCII `expansions`.
- - Do not rely on `clip_queries`; downstream code derives three retrieval queries.
-"""
-    prompt += """
-
-TRAKE CONTRACT:
-- If TASK_TYPE_FROM_FILENAME is TRAKE, return at least two ordered `events`
-  and exactly one English ASCII `event_queries` item per event.
-- Each event query must describe only that event and preserve event order.
-- For TEXTUAL_KIS and QA, return `events: []` and `event_queries: []`.
-"""
-    raw_plan = generate_llm_json(
-        prompt,
-        config=resolved_config,
-        temperature=resolved_config.llm_planner_temperature,
-        client=planner_client,
-    )
-    raw_plan["raw_query"] = rewritten.raw_query
-    raw_plan["rewritten_query"] = rewritten.rewritten_query
-    raw_plan["task_type"] = resolved_task_type.value
-    if not raw_plan.get("anchor") and raw_plan.get("clip_queries"):
-        raw_plan["anchor"] = raw_plan["clip_queries"][0]
-    return validate_query_plan(raw_plan)
+    raise ValueError("Local planner failed to produce a valid QueryPlan twice") from last_error

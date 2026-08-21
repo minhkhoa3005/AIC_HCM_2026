@@ -12,6 +12,7 @@ def generate_llm_json(
     config: LLMConfig,
     temperature: float,
     client: Any | None = None,
+    max_new_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Generate text-only JSON with the shared local model."""
 
@@ -23,7 +24,10 @@ def generate_llm_json(
         )
     from .vlm.local import get_local_vlm
 
-    return get_local_vlm(config).generate_text_json(prompt)
+    return get_local_vlm(config).generate_text_json(
+        prompt,
+        max_new_tokens=max_new_tokens,
+    )
 
 
 def generate_vlm_json(

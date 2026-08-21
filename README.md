@@ -9,13 +9,17 @@ Vietnamese query
   -> task_type from organizer filename/query_id
   -> rewrite (sửa dấu, chính tả, viết tắt)
   -> planner (QueryPlan đã kiểm tra)
-  -> English ASCII clip_queries
+  -> English anchor + expansions / ordered event queries
   -> retrieval
   -> rerank / QA
   -> Prediction / CSV
 ```
 
-Có đúng 2 lần gọi LLM: `rewrite_query_with_llm()` và `plan_query()`. `task_type` được lấy từ tên file/query_id của ban tổ chức hoặc truyền trực tiếp vào `run_query()`, không để LLM nhận dạng. `QueryPlan` giữ cả `raw_query` và `rewritten_query`; các trường ngữ nghĩa dùng tiếng Việt có dấu, chỉ `clip_queries` là tiếng Anh ASCII.
+Rewrite và Planner dùng chung model local. Rewrite giữ nguyên raw query nếu model
+trả JSON lỗi; Planner tự thử lại một lần với contract rút gọn. `task_type` được
+lấy từ tên file/query_id của ban tổ chức hoặc truyền trực tiếp vào `run_query()`,
+không để model nhận dạng. `QueryPlan` giữ cả `raw_query` và `rewritten_query`;
+anchor, expansions và event_queries dùng tiếng Anh ASCII cho CLIP.
 
 ## Các gói mã nguồn
 
@@ -28,6 +32,7 @@ submission/   Kiểm tra prediction và xuất CSV đúng định dạng BTC
 
 - `TEXTUAL_KIS`: trả về các keyframe được xếp hạng.
 - `QA`: chọn bằng chứng tốt nhất; câu trả lời dự phòng lấy OCR, rồi ASR.
+- `TRAKE`: tìm từng event và ghép chuỗi frame tăng dần theo thời gian.
 
 `retrieval.search_clip_text()` vẫn là interface để inject backend bên ngoài. Ngoài ra,
 `retrieval.LocalBundleRetriever` có thể đọc trực tiếp bundle `clip-b32-btc-v1`
@@ -42,8 +47,6 @@ Sao chép `.env.example` thành `.env`. Toàn bộ Rewrite, Planner, reranking v
 chạy bằng model local trên CUDA; không cần API key. `requirements.txt` là file
 dependency duy nhất và bao gồm CUDA PyTorch, CLIP, Transformers, Accelerate và
 bitsandbytes.
-
-`testlist.txt` là bộ truy vấn mẫu QA và TEXTUAL_KIS; `test.txt` là lệnh chạy thử thủ công. Các PDF, ảnh và ghi chú ở thư mục gốc là tài liệu/tham chiếu dự án, không phải mã nguồn chạy.
 
 ## Cài đặt
 

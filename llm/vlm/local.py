@@ -84,13 +84,18 @@ class LocalVLM:
         self._answer_cache[key] = answer
         return answer
 
-    def generate_text_json(self, prompt: str) -> dict[str, Any]:
+    def generate_text_json(
+        self,
+        prompt: str,
+        *,
+        max_new_tokens: int | None = None,
+    ) -> dict[str, Any]:
         """Generate a JSON object from text only using the shared local model."""
 
         return self._generate_json(
             prompt,
             [],
-            max_new_tokens=self.config.local_text_max_new_tokens,
+            max_new_tokens=max_new_tokens or self.config.local_text_max_new_tokens,
         )
 
     def _generate_json(
@@ -209,7 +214,13 @@ def _parse_json_object(text: str) -> dict[str, Any]:
         value = json.loads(cleaned)
     except json.JSONDecodeError:
         decoder = json.JSONDecoder()
-        for match in re.finditer(r"[\[{]", cleaned):
+        matches = list(re.finditer(r"[\[{]", cleaned))
+        # If the response starts as an object/array, decoding a nested array
+        # after that outer value fails would silently return the wrong shape.
+        # This is common when generation is truncated inside preserved_terms.
+        if cleaned.startswith(("{", "[")):
+            matches = matches[:1]
+        for match in matches:
             try:
                 value, _ = decoder.raw_decode(cleaned[match.start() :])
                 break

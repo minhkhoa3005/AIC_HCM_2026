@@ -60,6 +60,8 @@ def validate_query_plan(raw_plan: dict[str, Any]) -> QueryPlan:
         raise ValueError(f"Invalid QueryPlan payload: {exc}") from exc
 
     _validate_task_invariants(validated)
+    if validated.task_type == TaskType.TRAKE:
+        return validated
     if not validated.anchor.strip():
         raise ValueError("QueryPlan.anchor must contain an English CLIP anchor")
     if len(validated.expansions) != 10:

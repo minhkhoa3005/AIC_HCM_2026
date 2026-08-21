@@ -1,5 +1,7 @@
 """Regression tests for local model JSON shape normalization."""
 
+import pytest
+
 from llm.vlm.local import _parse_json_object
 
 
@@ -33,3 +35,10 @@ def test_recovers_fenced_json_with_explanation() -> None:
         'Result:\n```json\n{"answer": "white"}\n```\nDone.'
     )
     assert payload == {"answer": "white"}
+
+
+def test_does_not_treat_nested_array_as_top_level_payload() -> None:
+    with pytest.raises(ValueError, match="invalid JSON"):
+        _parse_json_object(
+            '{"rewritten_query": "query", "preserved_terms": []'
+        )
