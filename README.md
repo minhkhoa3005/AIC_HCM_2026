@@ -21,9 +21,9 @@ Có đúng 2 lần gọi LLM: `rewrite_query_with_llm()` và `plan_query()`. `ta
 
 ```text
 llm/          Rewrite, lập QueryPlan, validate và sinh JSON bằng model local
-retrieval/    Kiểu dữ liệu retrieval, interface CLIP và mock dùng offline
+retrieval/    Kiểu dữ liệu retrieval và kết nối CLIP/FAISS local
 pipeline/     Điều phối đơn/lô truy vấn, RRF rerank, QA, checkpoint JSONL
-submission/   Prediction, override thủ công và xuất CSV có cấu hình
+submission/   Kiểm tra prediction và xuất CSV đúng định dạng BTC
 ```
 
 - `TEXTUAL_KIS`: trả về các keyframe được xếp hạng.
